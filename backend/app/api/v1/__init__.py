@@ -2,6 +2,8 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes.auth_routes import router as auth_router
+from app.api.v1.routes.class_routes import router as class_router
+from app.api.v1.routes.announcement_routes import router as announcement_router
 from app.api.v1.routes.chapter_routes import router as chapter_router
 from app.api.v1.routes.material_routes import router as material_router
 from app.api.v1.routes.question_routes import router as question_router
@@ -13,6 +15,8 @@ from app.api.v1.routes.upload_routes import router as upload_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
+api_router.include_router(class_router)
+api_router.include_router(announcement_router)
 api_router.include_router(chapter_router)
 api_router.include_router(material_router)
 api_router.include_router(question_router)

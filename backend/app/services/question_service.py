@@ -1,6 +1,11 @@
 """Question service"""
+from __future__ import annotations
+
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from app.models.entities import Question
+
+from app.core.exceptions import BusinessException
+from app.models.entities import Chapter, Course, Question
 
 
 def list_questions(db: Session, chapter_id: int = None, type_: str = None):
@@ -20,6 +25,7 @@ def create_question(db: Session, data: dict):
     q = Question(**data)
     db.add(q)
     db.commit()
+    db.refresh(q)
     return q
 
 
@@ -45,3 +51,63 @@ def delete_question(db: Session, question_id: int):
 
 def get_chapter_questions(db: Session, chapter_id: int):
     return db.query(Question).filter(Question.chapter_id == chapter_id).order_by(Question.id).all()
+
+
+def list_courses(db: Session):
+    return db.query(Course).order_by(Course.id.desc()).all()
+
+
+def create_course(db: Session, name: str):
+    if db.query(Course).filter(Course.name == name).first():
+        raise BusinessException(400, "课程已存在")
+    course = Course(name=name)
+    db.add(course)
+    db.commit()
+    db.refresh(course)
+    return course
+
+
+def update_course(db: Session, course_id: int, name: str):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        return None
+    course.name = name
+    db.commit()
+    return course
+
+
+def delete_course(db: Session, course_id: int):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        return None
+    db.delete(course)
+    db.commit()
+    return True
+
+
+def import_questions_from_excel(db: Session, rows: list[dict]):
+    success_count = 0
+    fail_count = 0
+    errors = []
+    for idx, row in enumerate(rows, start=2):
+        try:
+            chapter_key = str(row.get("chapter", "")).strip()
+            ch = db.query(Chapter).filter((Chapter.num == chapter_key) | (Chapter.title == chapter_key)).first()
+            if not ch:
+                raise BusinessException(400, f"未找到章节: {chapter_key}")
+            q_type = str(row.get("type", "")).strip()
+            stem = str(row.get("stem", "")).strip()
+            if not stem:
+                raise BusinessException(400, "题干为空")
+            options = str(row.get("options", "")).strip()
+            option_list = [x.strip() for x in options.split("|") if x.strip()] if options else []
+            answer = str(row.get("answer", "")).strip()
+            explanation = str(row.get("explanation", "")).strip()
+            q = Question(type=q_type, chapter_id=ch.id, stem=stem, options=option_list, answer=answer, explanation=explanation)
+            db.add(q)
+            success_count += 1
+        except Exception as exc:
+            fail_count += 1
+            errors.append({"row": idx, "reason": str(exc)})
+    db.commit()
+    return {"success_count": success_count, "fail_count": fail_count, "errors": errors}

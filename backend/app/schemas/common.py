@@ -29,6 +29,37 @@ class RegisterRequest(BaseModel):
     major: Optional[str] = None
 
 
+# ── Class ───────────────────────────────────────────────────────────────────
+class ClassOut(BaseModel):
+    id: int
+    name: str
+    major: str
+    student_count: int = 0
+    created_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ClassCreate(BaseModel):
+    name: str = Field(min_length=1)
+    major: str = Field(min_length=1)
+
+
+class ClassStudentOut(BaseModel):
+    id: str
+    name: str
+    major: str = ""
+    enrolled_at: Optional[str] = None
+
+
+class ClassImportResult(BaseModel):
+    success_count: int = 0
+    skip_count: int = 0
+    fail_count: int = 0
+    errors: List[dict] = []
+
+
 # ── Chapter ─────────────────────────────────────────────────────────────────
 class ChapterOut(BaseModel):
     id: int
@@ -145,6 +176,7 @@ class ProjectOut(BaseModel):
     video_url: str = ""
     report_url: str = ""
     image_url: str = ""
+    link_url: str = ""
     status: str = "pending"
     reject_reason: str = ""
     date: str = ""
@@ -160,6 +192,7 @@ class ProjectCreate(BaseModel):
     video_url: str = ""
     report_url: str = ""
     image_url: str = ""
+    link_url: str = ""
 
 
 class ProjectReviewAction(BaseModel):
@@ -174,6 +207,7 @@ class StudentOut(BaseModel):
     progress: int = 0
     exercises: int = 0
     accuracy: int = 0
+    class_name: str = ""
 
 
 class TeacherStatsOut(BaseModel):

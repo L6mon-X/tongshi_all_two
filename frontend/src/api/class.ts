@@ -12,6 +12,7 @@ export interface ClassStudent {
   id: string
   name: string
   major: string
+  enrolled_at?: string
 }
 
 export function getClasses() {

@@ -24,7 +24,8 @@ def _format_project(db: Session, p):
         "major": p.major, "description": p.description,
         "tags": p.tags, "likes": p.likes, "featured": p.featured,
         "video_url": p.video_url, "report_url": p.report_url,
-        "image_url": p.image_url, "status": p.status,
+        "image_url": p.image_url, "link_url": getattr(p, "link_url", ""),
+        "status": p.status,
         "reject_reason": p.reject_reason, "date": p.date,
     }
 
@@ -50,11 +51,7 @@ def get_project_detail(project_id: int, db: Session = Depends(get_db), _: AuthUs
 
 
 @router.post("")
-def create_new_project(
-    data: ProjectCreate,
-    db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(get_current_user),
-):
+def create_new_project(data: ProjectCreate, db: Session = Depends(get_db), current_user: AuthUser = Depends(get_current_user)):
     p = create_project(db, current_user.id, data.model_dump())
     return success({"id": p.id})
 

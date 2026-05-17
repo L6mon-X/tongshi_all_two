@@ -40,7 +40,7 @@ def get_all_projects(
             "major": p.major, "description": p.description,
             "tags": p.tags, "likes": p.likes, "featured": p.featured,
             "video_url": p.video_url, "report_url": p.report_url,
-            "image_url": p.image_url, "status": p.status,
+            "image_url": p.image_url, "link_url": getattr(p, "link_url", ""), "status": p.status,
             "reject_reason": p.reject_reason, "date": p.date,
         })
     return success(result)

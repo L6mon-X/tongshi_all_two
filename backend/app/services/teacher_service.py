@@ -1,6 +1,6 @@
 """Teacher service"""
 from sqlalchemy.orm import Session
-from app.models.entities import User, Chapter, Project, QuizAttempt, StudentProgress
+from app.models.entities import User, Chapter, Project, QuizAttempt, StudentProgress, StudentClassEnrollment, Class
 
 
 def get_teacher_stats(db: Session):
@@ -28,10 +28,20 @@ def list_students(db: Session):
         total_accuracy = sum(p.accuracy for p in progresses)
         avg_accuracy = int(total_accuracy / len(progresses)) if progresses else 0
 
+        enrollment = (
+            db.query(StudentClassEnrollment, Class)
+            .join(Class, Class.id == StudentClassEnrollment.class_id)
+            .filter(StudentClassEnrollment.user_id == s.id)
+            .order_by(StudentClassEnrollment.enrolled_at.desc())
+            .first()
+        )
+        class_name = enrollment[1].name if enrollment else ""
+
         result.append({
             "id": s.id,
             "name": s.name,
             "major": s.major or "",
+            "class_name": class_name,
             "progress": avg_progress,
             "exercises": total_done,
             "accuracy": avg_accuracy,

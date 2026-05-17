@@ -1,6 +1,7 @@
 """Project service"""
 from datetime import datetime
 from sqlalchemy.orm import Session
+
 from app.models.entities import Project, ProjectLike, User
 
 
@@ -22,51 +23,50 @@ def create_project(db: Session, user_id: str, data: dict):
         author_id=user_id,
         major=user.major if user else "",
         date=datetime.now().strftime("%Y-%m-%d"),
-        **data,
+        title=data.get("title"),
+        description=data.get("description", ""),
+        tags=data.get("tags") or [],
+        video_url=data.get("video_url", ""),
+        report_url=data.get("report_url", ""),
+        image_url=data.get("image_url", ""),
+        link_url=data.get("link_url", ""),
     )
     db.add(project)
     db.commit()
+    db.refresh(project)
     return project
 
 
 def toggle_like(db: Session, user_id: str, project_id: int):
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = get_project(db, project_id)
     if not project:
         return None
-
-    existing = db.query(ProjectLike).filter(
-        ProjectLike.user_id == user_id,
-        ProjectLike.project_id == project_id,
-    ).first()
-
+    existing = db.query(ProjectLike).filter(ProjectLike.user_id == user_id, ProjectLike.project_id == project_id).first()
     if existing:
         db.delete(existing)
         project.likes = max(0, project.likes - 1)
-        liked = False
     else:
-        like = ProjectLike(user_id=user_id, project_id=project_id)
-        db.add(like)
+        db.add(ProjectLike(user_id=user_id, project_id=project_id))
         project.likes += 1
-        liked = True
-
     db.commit()
-    return {"liked": liked, "likes": project.likes}
+    return {"liked": existing is None, "likes": project.likes}
 
 
 def approve_project(db: Session, project_id: int):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
+    p = get_project(db, project_id)
+    if not p:
         return None
-    project.status = "approved"
+    p.status = "approved"
+    p.reject_reason = ""
     db.commit()
-    return project
+    return p
 
 
-def reject_project(db: Session, project_id: int, reason: str = ""):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
+def reject_project(db: Session, project_id: int, reason: str):
+    p = get_project(db, project_id)
+    if not p:
         return None
-    project.status = "rejected"
-    project.reject_reason = reason
+    p.status = "rejected"
+    p.reject_reason = reason
     db.commit()
-    return project
+    return p
