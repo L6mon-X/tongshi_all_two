@@ -107,7 +107,7 @@ def batch_download_projects(
     if not projects:
         raise BusinessException(404, "没有可下载的作品报告")
 
-    upload_dir = Path(__file__).resolve().parents[3] / "uploads"
+    upload_dir = Path(__file__).resolve().parents[4] / "uploads"
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:

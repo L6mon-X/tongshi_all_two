@@ -65,7 +65,9 @@ backend/
 │
 ├── tests/
 │   ├── conftest.py               # 测试夹具：SQLite 内存库 + TestClient + 种子数据
-│   └── test_auth.py              # 集成测试（14 例）：认证、章节、答题
+v│   ├── test_auth.py              # 集成测试：认证、章节、答题
+│   ├── test_integration_bugfixes.py  # 回归测试：教师隔离、业务修复
+│   └── test_schema_compat.py     # 数据库结构兼容性测试
 │
 ├── docs/
 │   └── 项目修改记录.md            # 项目演进历史
@@ -132,21 +134,22 @@ Client 请求
 - 密码存储：`pbkdf2_sha256` 加密
 - 角色：`student`（学生）和 `teacher`（教师），通过 `require_role("teacher")` 依赖注入控制
 
-### 数据库表（11 张）
+### 数据库表（16 张）
 
 | 表名 | 用途 |
 |------|------|
 | `users` | 用户（学生/教师），id=学号/工号 |
-| `courses` | 课程 |
-| `chapters` | 章节（6 章），含排课时间 |
-| `materials` | 学习资料（视频/PDF） |
-| `questions` | 题库（选择题/填空题） |
+| `classes` | 班级（含 `teacher_id` 归属） |
+| `student_class_enrollment` | 学生-班级注册关系 |
+| `courses` | 课程（含 `teacher_id` 归属） |
+| `chapters` | 章节（6 章），含排课时间和 `teacher_id` 归属 |
+| `materials` | 学习资料（视频/PDF，含 `teacher_id` 归属） |
+| `questions` | 题库（选择题/填空题，含 `teacher_id` 归属） |
 | `quiz_attempts` | 答题记录 |
 | `student_progress` | 学生学习进度（按章节） |
 | `projects` | 学生 AI 项目作品 |
+| `project_images` | 作品图片 |
 | `project_likes` | 作品点赞关系 |
-| `classes` | 班级 |
-| `student_class_enrollment` | 学生-班级注册关系 |
 | `announcements` | 公告/测验任务 |
 | `announcement_reads` | 公告已读记录 |
 | `task_completions` | 任务完成记录 |
@@ -170,7 +173,7 @@ cd backend
 python -m pytest tests/ -v
 ```
 
-14 个测试用例覆盖认证、章节、答题核心链路，使用 SQLite 内存数据库（无需 MySQL）。
+测试覆盖认证、章节、答题、数据库兼容性、教师数据隔离等核心链路，使用 SQLite 内存数据库（无需 MySQL）。
 
 ---
 

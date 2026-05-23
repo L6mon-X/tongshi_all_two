@@ -13,7 +13,7 @@ from app.schemas.common import AuthUser
 
 router = APIRouter(tags=["upload"])
 
-UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads"
+UPLOAD_DIR = Path(__file__).resolve().parents[4] / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
