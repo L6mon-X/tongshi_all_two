@@ -87,11 +87,13 @@ onMounted(async () => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   text-align: center;
-  transition: box-shadow var(--duration-fast);
+  box-shadow: var(--shadow-xs);
+  transition: all var(--duration-fast);
 }
 
 .stat-card:hover {
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .stat-value {
@@ -126,23 +128,26 @@ onMounted(async () => {
   gap: var(--space-md);
   padding: var(--space-lg);
   background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(224, 216, 200, 0.8);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--duration-fast);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--duration-normal) var(--ease-out);
 }
 
 .action-card:hover {
   border-color: var(--color-primary-light);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .action-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  margin-top: 6px;
+  margin-top: 7px;
   flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(45, 90, 110, 0.06);
 }
 
 .action-card h3 {
