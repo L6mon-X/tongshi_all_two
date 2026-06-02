@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.core.security import get_current_user, require_role
 from app.core.response import success
 from app.core.exceptions import BusinessException
+from app.core.timezone_utils import to_beijing_iso
 from app.core.upload_validation import validate_upload, ALLOWED_EXCEL_EXTENSIONS, MAX_EXCEL_SIZE
 from app.schemas.common import AuthUser, QuestionCreate, QuestionUpdate, CourseCreateRequest, CourseUpdateRequest
 from app.services.question_service import (
@@ -82,25 +83,62 @@ def remove_question(question_id: int, db: Session = Depends(get_db), current_use
 def get_courses(db: Session = Depends(get_db), current_user: AuthUser = Depends(get_current_user)):
     if current_user.role == "teacher":
         courses = list_courses(db, current_user.id)
+        return success([{
+            "id": c.id,
+            "name": c.name,
+            "created_at": to_beijing_iso(c.created_at),
+            "material_count": len(c.materials),
+            "question_count": len(c.questions),
+            "class_count": len(c.classes),
+        } for c in courses])
     elif current_user.role == "student":
+        # 查询学生所属班级
+        enrollments = (
+            db.query(StudentClassEnrollment)
+            .filter(StudentClassEnrollment.user_id == current_user.id)
+            .all()
+        )
+        if not enrollments:
+            # 学生未加入任何班级
+            return success({"courses": [], "hint": "你尚未加入任何班级，请联系老师"})
+        # 检查班级是否已分配课程
+        class_ids = [e.class_id for e in enrollments]
+        classes_with_course = (
+            db.query(Class)
+            .filter(Class.id.in_(class_ids), Class.course_id.isnot(None))
+            .all()
+        )
+        if not classes_with_course:
+            # 学生有班级但班级未分配课程
+            return success({"courses": [], "hint": "你的班级尚未分配课程，请联系老师"})
+        course_ids = list({c.course_id for c in classes_with_course})
         courses = (
             db.query(Course)
-            .join(Class, Class.course_id == Course.id)
-            .join(StudentClassEnrollment, StudentClassEnrollment.class_id == Class.id)
-            .filter(StudentClassEnrollment.user_id == current_user.id)
+            .filter(Course.id.in_(course_ids))
             .order_by(Course.id.desc())
             .all()
         )
+        return success({
+            "courses": [{
+                "id": c.id,
+                "name": c.name,
+                "created_at": to_beijing_iso(c.created_at),
+                "material_count": len(c.materials),
+                "question_count": len(c.questions),
+                "class_count": len(c.classes),
+            } for c in courses],
+            "hint": None,
+        })
     else:
         courses = list_courses(db)
-    return success([{
-        "id": c.id,
-        "name": c.name,
-        "created_at": c.created_at.isoformat() if c.created_at else "",
-        "material_count": len(c.materials),
-        "question_count": len(c.questions),
-        "class_count": len(c.classes),
-    } for c in courses])
+        return success([{
+            "id": c.id,
+            "name": c.name,
+            "created_at": to_beijing_iso(c.created_at),
+            "material_count": len(c.materials),
+            "question_count": len(c.questions),
+            "class_count": len(c.classes),
+        } for c in courses])
 
 
 @router.post("/courses", summary="创建课程", description="教师端：创建新课程")
@@ -123,7 +161,7 @@ def get_course(
     return success({
         "id": course.id,
         "name": course.name,
-        "created_at": course.created_at.isoformat() if course.created_at else "",
+        "created_at": to_beijing_iso(course.created_at),
         "material_count": material_count,
         "question_count": question_count,
         "class_count": class_count,

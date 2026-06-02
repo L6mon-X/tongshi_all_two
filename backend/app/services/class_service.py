@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessException
 from app.core.security import get_password_hash
+from app.core.timezone_utils import to_beijing_iso
 from app.models.entities import (
     Announcement,
     AnnouncementClass,
@@ -33,7 +34,7 @@ DEFAULT_STUDENT_PASSWORD = "123456"
 
 
 def _now_iso(value: datetime | None) -> str:
-    return value.isoformat() if value else ""
+    return to_beijing_iso(value)
 
 
 def _owned_class_query(db: Session, teacher_id: str):

@@ -1,6 +1,31 @@
 """Portfolio service"""
+import re
+from datetime import datetime, timezone
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.entities import User, QuizAttempt, Project, StudentProgress, StudentClassEnrollment, Class
+
+
+def _derive_grade(db: Session, user_id: str) -> str:
+    """从学生所属班级名中解析年级，例如 '2025级1班' → '2025 级'。
+
+    无班级或无法解析时返回空字符串。
+    """
+    class_names = (
+        db.query(Class.name)
+        .join(StudentClassEnrollment, StudentClassEnrollment.class_id == Class.id)
+        .filter(StudentClassEnrollment.user_id == user_id)
+        .all()
+    )
+    for (name,) in class_names:
+        # 匹配 "20XX级" 或 "20XX" 开头
+        m = re.search(r"(20\d{2})\s*级", name)
+        if m:
+            return f"{m.group(1)} 级"
+        m = re.search(r"^(20\d{2})", name)
+        if m:
+            return f"{m.group(1)} 级"
+    return ""
 
 
 def get_portfolio(db: Session, user_id: str):
@@ -31,14 +56,34 @@ def get_portfolio(db: Session, user_id: str):
         Project.author_id == user_id, Project.status == "approved",
     ).all()
 
-    # Simulated radar data
+    # 作品平均点赞
+    project_avg_likes = int(sum(p.likes for p in projects) / len(projects)) if projects else 0
+    # 精选/展示作品数
+    featured_projects = sum(1 for p in projects if p.featured)
+    # 学习持续天数（答题记录覆盖的 distinct 日期数）
+    participation_days = 0
+    earliest_attempt = (
+        db.query(func.min(QuizAttempt.answered_at))
+        .filter(QuizAttempt.user_id == user_id)
+        .scalar()
+    )
+    if earliest_attempt:
+        distinct_dates = (
+            db.query(func.date(QuizAttempt.answered_at))
+            .filter(QuizAttempt.user_id == user_id)
+            .distinct()
+            .count()
+        )
+        participation_days = distinct_dates
+
+    # 雷达图六维数据 —— 全部对接到真实数据源
     radar = {
-        "理论基础": min(100, avg_progress + 10),
-        "实践能力": min(100, len(projects) * 20),
-        "创新思维": min(100, len(projects) * 15 + 20),
-        "团队协作": min(100, attempts * 2),
-        "社会传播": min(100, sum(p.likes for p in projects) * 5),
-        "伦理意识": min(100, avg_progress),
+        "理论基础": avg_progress,                              # 课程学习进度（来自 StudentProgress）
+        "实践能力": accuracy,                                   # 答题正确率（来自 QuizAttempt）
+        "创新思维": min(100, len(projects) * 25),               # 作品数量
+        "团队协作": min(100, project_avg_likes * 10),           # 作品平均点赞数
+        "社会传播": min(100, featured_projects * 33),            # 精选/展示作品数
+        "伦理意识": min(100, int(participation_days / 180 * 100)),  # 学习持续天数 / 180 天
     }
 
     timeline = []
@@ -50,7 +95,7 @@ def get_portfolio(db: Session, user_id: str):
         })
 
     return {
-        "user": {"id": user.id, "name": user.name, "role": user.role, "major": user.major},
+        "user": {"id": user.id, "name": user.name, "role": user.role, "major": user.major, "grade": _derive_grade(db, user_id)},
         "stats": {
             "study_hours": int(avg_progress * 0.5),
             "total_exercises": attempts,

@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 
-from app.models.entities import Question, QuizAttempt, StudentProgress
+from app.models.entities import Class, Question, QuizAttempt, StudentClassEnrollment, StudentProgress
+from app.core.timezone_utils import to_beijing_iso, beijing_today
 
 
 def submit_answer(db: Session, user_id: str, question_id: int, user_answer: str):
@@ -58,7 +59,7 @@ def submit_answer(db: Session, user_id: str, question_id: int, user_answer: str)
         "is_correct": is_correct,
         "correct_answer": question.answer,
         "explanation": question.explanation,
-        "answered_at": attempt.answered_at.isoformat() if attempt.answered_at else "",
+        "answered_at": to_beijing_iso(attempt.answered_at),
     }
 
 
@@ -78,7 +79,7 @@ def get_quiz_history(db: Session, user_id: str, limit: int = 10):
             "is_correct": a.is_correct,
             "correct_answer": q.answer if q else "",
             "explanation": q.explanation if q else "",
-            "answered_at": a.answered_at.isoformat() if a.answered_at else "",
+            "answered_at": to_beijing_iso(a.answered_at),
             "stem": q.stem if q else "",
         })
     return result
@@ -93,12 +94,28 @@ def get_quiz_stats(db: Session, user_id: str):
     ).count()
     accuracy = int(correct / questions_done * 100) if questions_done > 0 else 0
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = beijing_today()
     today_count = db.query(QuizAttempt).filter(
         QuizAttempt.user_id == user_id,
     ).filter(
         QuizAttempt.answered_at >= today,
     ).count()
+    # 按学生所属课程过滤 total_questions
+    student_course_ids = (
+        db.query(Question.course_id)
+        .join(Class, Class.course_id == Question.course_id)
+        .join(StudentClassEnrollment, StudentClassEnrollment.class_id == Class.id)
+        .filter(StudentClassEnrollment.user_id == user_id)
+        .distinct()
+        .all()
+    )
+    student_course_id_list = [row.course_id for row in student_course_ids]
+    if student_course_id_list:
+        total_questions = db.query(Question).filter(
+            Question.course_id.in_(student_course_id_list)
+        ).count()
+    else:
+        total_questions = 0
 
     return {
         "total_questions": total_questions,
@@ -153,6 +170,6 @@ def get_wrong_questions(db: Session, user_id: str):
             "answer": q.answer,
             "explanation": q.explanation,
             "user_answer": a.user_answer,
-            "answered_at": a.answered_at.isoformat() if a.answered_at else "",
+            "answered_at": to_beijing_iso(a.answered_at),
         })
     return result

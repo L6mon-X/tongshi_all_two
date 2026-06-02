@@ -63,8 +63,16 @@ def delete_question(db: Session, question_id: int, teacher_id: str):
     if not q:
         return False
     # 先删除关联的答题记录
-    from app.models.entities import QuizAttempt
+    from app.models.entities import QuizAttempt, Announcement
+    from sqlalchemy import func as sa_func
     db.query(QuizAttempt).filter(QuizAttempt.question_id == question_id).delete()
+    # 清理公告中对被删题目的引用（从 question_ids JSON 数组中移除该 ID）
+    anns = db.query(Announcement).filter(
+        sa_func.json_contains(Announcement.question_ids, str(question_id))
+    ).all()
+    for ann in anns:
+        if ann.question_ids:
+            ann.question_ids = [qid for qid in ann.question_ids if qid != question_id]
     # 再删除题目
     db.delete(q)
     db.commit()

@@ -64,7 +64,7 @@ const typeColorMap: Record<string, string> = {
 onMounted(async () => {
   try {
     const data = await getPortfolio()
-    student.value = { name: data.user.name, major: data.user.major || '', grade: '2025 级', avatar: '' }
+    student.value = { name: data.user.name, major: data.user.major || '', grade: data.user.grade || '', avatar: '' }
     stats.value = [
       { label: '学习时长', value: `${data.stats.study_hours}h`, color: 'var(--color-learn)' },
       { label: '练习题数', value: String(data.stats.total_exercises), color: 'var(--color-practice)' },
