@@ -17,6 +17,9 @@ export interface Student {
   progress: number
   exercises: number
   accuracy: number
+  completed_tasks: number
+  incomplete_tasks: number
+  task_completion_rate: number
 }
 
 export interface PaginatedResult<T> {

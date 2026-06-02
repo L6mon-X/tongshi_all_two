@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,9 @@ def mark_completed(db: Session, user_id: str, announcement_id: int):
     ann = db.query(Announcement).filter(Announcement.id == announcement_id).first()
     if not ann or not _student_can_access(db, user_id, announcement_id):
         return None
+    # 截止时间校验：已过期的任务不允许标记完成
+    if ann.end_time and datetime.now(timezone.utc) > ann.end_time:
+        raise BusinessException(400, "该任务已截止，无法标记完成")
     existing = db.query(TaskCompletion).filter(
         TaskCompletion.user_id == user_id,
         TaskCompletion.announcement_id == announcement_id,
@@ -106,4 +110,89 @@ def completion_report(db: Session, announcement_id: int, teacher_id: str):
         "incomplete_students": incomplete_students,
         "per_class": per_class,
         "is_expired": bool(ann.end_time and datetime.now(timezone.utc) > ann.end_time),
+    }
+
+
+def _iso(dt: datetime | None) -> str:
+    return dt.isoformat() if dt else ""
+
+
+def task_overview(db: Session, teacher_id: str) -> dict:
+    """教师所有任务的总览：总完成数、未完成数，以及每个任务的简要信息。"""
+    anns = (
+        db.query(Announcement)
+        .filter(Announcement.teacher_id == teacher_id, Announcement.type == "quiz")
+        .order_by(Announcement.created_at.desc())
+        .all()
+    )
+    if not anns:
+        return {"total_tasks": 0, "total_completed": 0, "total_incomplete": 0, "tasks": []}
+
+    ann_ids = [ann.id for ann in anns]
+
+    # 每个任务的班级信息
+    class_links = db.query(AnnouncementClass).filter(AnnouncementClass.announcement_id.in_(ann_ids)).all()
+    ann_class_ids: dict[int, list[int]] = {}
+    class_id_set: set[int] = set()
+    for link in class_links:
+        ann_class_ids.setdefault(link.announcement_id, []).append(link.class_id)
+        class_id_set.add(link.class_id)
+
+    # 班级名称映射
+    from app.models.entities import Class
+    class_names_map = {c.id: c.name for c in db.query(Class).filter(Class.id.in_(class_id_set)).all()} if class_id_set else {}
+
+    # 每个任务的已完成人数
+    completion_counts = dict(
+        db.query(TaskCompletion.announcement_id, func.count(TaskCompletion.user_id))
+        .filter(TaskCompletion.announcement_id.in_(ann_ids))
+        .group_by(TaskCompletion.announcement_id)
+        .all()
+    )
+
+    # 每个任务关联的去重学生数（按任务+班级统计学生，再跨班级去重）
+    if class_id_set:
+        enrollments = (
+            db.query(StudentClassEnrollment.user_id, StudentClassEnrollment.class_id)
+            .filter(StudentClassEnrollment.class_id.in_(class_id_set))
+            .all()
+        )
+    else:
+        enrollments = []
+
+    # 构建 class_id -> set of student_ids
+    class_students: dict[int, set[str]] = {}
+    for uid, cid in enrollments:
+        class_students.setdefault(cid, set()).add(uid)
+
+    total_completed = 0
+    total_incomplete = 0
+    tasks = []
+    now = datetime.now(timezone.utc)
+
+    for ann in anns:
+        cids = ann_class_ids.get(ann.id, [])
+        # 跨班级去重学生
+        student_ids: set[str] = set()
+        for cid in cids:
+            student_ids.update(class_students.get(cid, set()))
+        total = len(student_ids)
+        completed = completion_counts.get(ann.id, 0)
+        total_completed += completed
+        total_incomplete += max(total - completed, 0)
+        tasks.append({
+            "id": ann.id,
+            "title": ann.title,
+            "class_names": [class_names_map.get(cid, "") for cid in cids],
+            "total_students": total,
+            "completed_count": completed,
+            "is_expired": bool(ann.end_time and now > ann.end_time),
+            "created_at": _iso(ann.created_at),
+        })
+
+    return {
+        "total_tasks": len(anns),
+        "total_completed": total_completed,
+        "total_incomplete": total_incomplete,
+        "tasks": tasks,
     }

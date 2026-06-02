@@ -3,7 +3,7 @@ import io
 from pathlib import Path
 
 from app.core.security import get_password_hash
-from app.models.entities import Class, Course, Material, Project, Question, StoredFile, StudentClassEnrollment, StudentProgress, User
+from app.models.entities import Announcement, AnnouncementClass, Class, Course, Material, Project, Question, StoredFile, StudentClassEnrollment, StudentProgress, TaskCompletion, User
 from tests.conftest import auth_header
 
 
@@ -121,6 +121,29 @@ class TestTeacherRefactor:
 
         assert data["code"] == 0
         assert [item["id"] for item in data["data"]["items"]] == ["2025001"]
+
+    def test_teacher_students_include_task_completion_stats(self, client, db_session, teacher_token):
+        course = db_session.query(Course).filter(Course.created_by == "T001").first()
+        cls = db_session.query(Class).filter(Class.course_id == course.id).first()
+        first = Announcement(course_id=course.id, teacher_id="T001", type="quiz", title="任务一", question_ids=[1])
+        second = Announcement(course_id=course.id, teacher_id="T001", type="quiz", title="任务二", question_ids=[1])
+        db_session.add_all([first, second])
+        db_session.flush()
+        db_session.add_all([
+            AnnouncementClass(announcement_id=first.id, class_id=cls.id),
+            AnnouncementClass(announcement_id=second.id, class_id=cls.id),
+            TaskCompletion(announcement_id=first.id, user_id="2025001"),
+        ])
+        db_session.commit()
+
+        resp = client.get("/api/teacher/students", headers=auth_header(teacher_token))
+        data = resp.json()
+
+        assert data["code"] == 0
+        student = data["data"]["items"][0]
+        assert student["completed_tasks"] == 1
+        assert student["incomplete_tasks"] == 1
+        assert student["task_completion_rate"] == 50
 
     def test_publish_questions_supports_multiple_classes_and_completion_report(self, client, db_session, teacher_token, student_token):
         course = db_session.query(Course).filter(Course.created_by == "T001").first()

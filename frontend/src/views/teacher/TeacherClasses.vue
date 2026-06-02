@@ -156,7 +156,7 @@ onMounted(async () => {
       </div>
       <div class="form-group">
         <label>班级名称</label>
-        <el-input v-model="form.name" placeholder="如：2025级1班" size="large" />
+        <el-input v-model="form.name" placeholder="如：26电信1-3" size="large" />
       </div>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>

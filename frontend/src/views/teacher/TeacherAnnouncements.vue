@@ -16,7 +16,12 @@ const loading = ref(true)
 const dialogVisible = ref(false)
 const questionDialogVisible = ref(false)
 const questionLoading = ref(false)
-const selectedQuestionIds = ref<number[]>([])
+const questionKeyword = ref('')
+const questionTypeFilter = ref<'' | 'choice' | 'fill'>('')
+const questionAddCount = ref<number | null>(null)
+const draftSelectedQuestionIds = ref<number[]>([])
+const checkedQuestionIds = ref<number[]>([])
+let questionRequestSeq = 0
 
 const form = reactive({
   course_id: '' as number | '',
@@ -27,10 +32,42 @@ const form = reactive({
   end_time: '',
 })
 
+/** 格式化当前时间为 YYYY-MM-DD HH:mm:ss */
+function nowString() {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 const targetClasses = computed(() => {
   if (typeof form.course_id !== 'number') return []
   return classes.value.filter(item => item.course_id === form.course_id)
 })
+
+const filteredQuestions = computed(() => {
+  const keyword = questionKeyword.value.trim().toLowerCase()
+  return questions.value.filter(item => {
+    const matchType = !questionTypeFilter.value || item.type === questionTypeFilter.value
+    const searchable = `${item.stem || ''} ${item.answer || ''} ${item.explanation || ''}`.toLowerCase()
+    const matchKeyword = !keyword || searchable.includes(keyword)
+    return matchType && matchKeyword
+  })
+})
+
+const selectedQuestions = computed(() => {
+  const questionMap = new Map(questions.value.map(item => [item.id, item]))
+  return draftSelectedQuestionIds.value
+    .map(id => questionMap.get(id))
+    .filter((item): item is Question => Boolean(item))
+})
+
+function getQuestionTypeLabel(type: Question['type']) {
+  return type === 'choice' ? '选择题' : '填空题'
+}
+
+function getQuestionPreview(stem: string, length = 52) {
+  return stem.length > length ? `${stem.slice(0, length)}...` : stem
+}
 
 async function loadBase() {
   const [list, courseList, classList] = await Promise.all([getAnnouncements(), getCourses(), getClasses()])
@@ -40,17 +77,27 @@ async function loadBase() {
 }
 
 async function loadQuestions() {
-  if (typeof form.course_id !== 'number') {
+  const requestSeq = ++questionRequestSeq
+  const courseId = form.course_id
+  if (typeof courseId !== 'number') {
     questions.value = []
+    questionLoading.value = false
     return
   }
   questionLoading.value = true
   try {
-    questions.value = await getQuestions({ course_id: form.course_id })
+    const list = await getQuestions({ course_id: courseId })
+    if (requestSeq === questionRequestSeq && form.course_id === courseId) {
+      questions.value = list
+    }
   } catch {
-    ElMessage.error('题目加载失败')
+    if (requestSeq === questionRequestSeq && form.course_id === courseId) {
+      ElMessage.error('题目加载失败')
+    }
   } finally {
-    questionLoading.value = false
+    if (requestSeq === questionRequestSeq && form.course_id === courseId) {
+      questionLoading.value = false
+    }
   }
 }
 
@@ -60,29 +107,83 @@ function openCreate() {
     class_ids: [],
     title: '',
     question_ids: [],
-    start_time: '',
+    start_time: nowString(),
     end_time: '',
   })
   dialogVisible.value = true
   loadQuestions()
 }
 
-function openQuestionPicker() {
+async function openQuestionPicker() {
   if (typeof form.course_id !== 'number') {
     ElMessage.warning('请先选择课程')
     return
   }
-  selectedQuestionIds.value = [...form.question_ids]
+  questionKeyword.value = ''
+  questionTypeFilter.value = ''
+  questionAddCount.value = null
+  checkedQuestionIds.value = []
+  draftSelectedQuestionIds.value = [...form.question_ids]
   questionDialogVisible.value = true
-  loadQuestions()
+  await loadQuestions()
 }
 
 function handleQuestionSelection(rows: Question[]) {
-  selectedQuestionIds.value = rows.map(item => item.id)
+  checkedQuestionIds.value = rows.map(item => item.id)
+}
+
+function appendQuestionIds(ids: number[]) {
+  const existing = new Set(draftSelectedQuestionIds.value)
+  const addedIds = ids.filter(id => !existing.has(id))
+  if (addedIds.length === 0) {
+    ElMessage.warning('当前没有可加入的新题目')
+    return
+  }
+  draftSelectedQuestionIds.value = [...draftSelectedQuestionIds.value, ...addedIds]
+  ElMessage.success(`已加入 ${addedIds.length} 道题`)
+}
+
+function addCheckedQuestions() {
+  if (checkedQuestionIds.value.length === 0) {
+    ElMessage.warning('请先勾选题目')
+    return
+  }
+  appendQuestionIds(checkedQuestionIds.value)
+}
+
+function addTopFilteredQuestions() {
+  const count = Number(questionAddCount.value)
+  if (!Number.isInteger(count) || count < 1) {
+    ElMessage.warning('请输入加入数量')
+    return
+  }
+  const existing = new Set(draftSelectedQuestionIds.value)
+  const availableIds = filteredQuestions.value
+    .map(item => item.id)
+    .filter(id => !existing.has(id))
+  if (availableIds.length === 0) {
+    ElMessage.warning('当前筛选结果没有可加入的题目')
+    return
+  }
+  appendQuestionIds(availableIds.slice(0, count))
+}
+
+function removeDraftQuestion(id: number) {
+  draftSelectedQuestionIds.value = draftSelectedQuestionIds.value.filter(item => item !== id)
+}
+
+function clearDraftQuestions() {
+  draftSelectedQuestionIds.value = []
+}
+
+function resetQuestionFilters() {
+  questionKeyword.value = ''
+  questionTypeFilter.value = ''
+  questionAddCount.value = null
 }
 
 function confirmQuestions() {
-  form.question_ids = [...selectedQuestionIds.value]
+  form.question_ids = [...draftSelectedQuestionIds.value]
   questionDialogVisible.value = false
 }
 
@@ -101,6 +202,10 @@ async function handleCreate() {
   }
   if (form.question_ids.length === 0) {
     ElMessage.warning('请选择题目')
+    return
+  }
+  if (form.start_time && form.end_time && form.start_time >= form.end_time) {
+    ElMessage.warning('截止时间必须晚于开始时间')
     return
   }
 
@@ -132,13 +237,21 @@ async function handleDelete(row: Announcement) {
   }
 }
 
+function isExpired(row: Announcement) {
+  if (!row.end_time) return false
+  return new Date(row.end_time) < new Date()
+}
+
 function openReport(row: Announcement) {
-  router.push({ path: '/teacher/grades', query: { tab: 'tasks', task_id: row.id } })
+  router.push({ path: '/teacher/task-report', query: { task_id: row.id } })
 }
 
 watch(() => form.course_id, () => {
   form.class_ids = []
   form.question_ids = []
+  draftSelectedQuestionIds.value = []
+  checkedQuestionIds.value = []
+  resetQuestionFilters()
   loadQuestions()
 })
 
@@ -156,8 +269,8 @@ onMounted(async () => {
 <template>
   <div class="publish-page">
     <div class="page-header">
-      <h1>发布题目</h1>
-      <el-button type="primary" round @click="openCreate">发布题目</el-button>
+      <h1>发布作业</h1>
+      <el-button type="primary" round @click="openCreate">发布作业</el-button>
     </div>
 
     <el-table :data="announcements" stripe style="width: 100%" v-loading="loading">
@@ -171,8 +284,16 @@ onMounted(async () => {
       <el-table-column label="题目数" width="90" align="center">
         <template #default="{ row }">{{ row.question_ids?.length || 0 }}</template>
       </el-table-column>
-      <el-table-column prop="created_at" label="发布时间" width="160">
-        <template #default="{ row }">{{ row.created_at ? row.created_at.slice(0, 16).replace('T', ' ') : '-' }}</template>
+      <el-table-column label="开始时间" width="160">
+        <template #default="{ row }">{{ row.start_time ? row.start_time.slice(0, 16).replace('T', ' ') : '-' }}</template>
+      </el-table-column>
+      <el-table-column label="截止时间" width="160">
+        <template #default="{ row }">
+          <span v-if="row.end_time" :style="{ color: isExpired(row) ? '#ef4444' : '' }">
+            {{ row.end_time.slice(0, 16).replace('T', ' ') }}
+          </span>
+          <span v-else>-</span>
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
@@ -186,7 +307,7 @@ onMounted(async () => {
       暂无发布记录
     </div>
 
-    <el-dialog v-model="dialogVisible" title="发布题目" width="600px">
+    <el-dialog v-model="dialogVisible" title="发布作业" width="600px">
       <div class="form-group">
         <label>所属课程</label>
         <el-select v-model="form.course_id" placeholder="选择课程" size="large" style="width: 100%">
@@ -213,11 +334,11 @@ onMounted(async () => {
       <div class="time-row">
         <div class="form-group">
           <label>开始时间</label>
-          <el-date-picker v-model="form.start_time" type="datetime" placeholder="不限" size="large" style="width: 100%" value-format="YYYY-MM-DD HH:mm:ss" />
+          <el-date-picker v-model="form.start_time" type="datetime" placeholder="不限" size="large" style="width: 100%" value-format="YYYY-MM-DD HH:mm:ss" clearable />
         </div>
         <div class="form-group">
           <label>截止时间</label>
-          <el-date-picker v-model="form.end_time" type="datetime" placeholder="不限" size="large" style="width: 100%" value-format="YYYY-MM-DD HH:mm:ss" />
+          <el-date-picker v-model="form.end_time" type="datetime" placeholder="不限" size="large" style="width: 100%" value-format="YYYY-MM-DD HH:mm:ss" clearable />
         </div>
       </div>
       <template #footer>
@@ -226,22 +347,82 @@ onMounted(async () => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="questionDialogVisible" title="选择题目" width="760px" append-to-body>
-      <el-table
-        :data="questions"
-        row-key="id"
-        style="width: 100%"
-        v-loading="questionLoading"
-        @selection-change="handleQuestionSelection"
-      >
-        <el-table-column type="selection" width="50" />
-        <el-table-column label="题干" min-width="300">
-          <template #default="{ row }">{{ row.stem.length > 52 ? row.stem.slice(0, 52) + '…' : row.stem }}</template>
-        </el-table-column>
-        <el-table-column label="题型" width="100">
-          <template #default="{ row }">{{ row.type === 'choice' ? '选择题' : '填空题' }}</template>
-        </el-table-column>
-      </el-table>
+    <el-dialog v-model="questionDialogVisible" title="选择题目" width="min(980px, calc(100vw - 32px))" append-to-body class="question-picker-dialog">
+      <div class="question-picker">
+        <div class="question-library">
+          <div class="question-filter-bar">
+            <el-input
+              v-model="questionKeyword"
+              placeholder="搜索题干、答案或解析"
+              clearable
+              size="large"
+            />
+            <el-select v-model="questionTypeFilter" placeholder="全部题型" clearable size="large" style="width: 140px">
+              <el-option label="选择题" value="choice" />
+              <el-option label="填空题" value="fill" />
+            </el-select>
+            <el-button size="large" @click="resetQuestionFilters">重置</el-button>
+          </div>
+
+          <div class="question-batch-row">
+            <el-input-number
+              v-model="questionAddCount"
+              :min="1"
+              :max="Math.max(filteredQuestions.length, 1)"
+              :controls="false"
+              placeholder="数量"
+              size="large"
+              class="question-count-input"
+            />
+            <el-button plain type="primary" size="large" @click="addTopFilteredQuestions">加入前 N 题</el-button>
+            <el-button type="primary" size="large" @click="addCheckedQuestions">加入勾选题</el-button>
+            <span class="question-result-count">筛选结果 {{ filteredQuestions.length }} 题</span>
+          </div>
+
+          <el-table
+            :data="filteredQuestions"
+            row-key="id"
+            height="420"
+            style="width: 100%"
+            v-loading="questionLoading"
+            :empty-text="questions.length === 0 ? '当前课程暂无题目，请先到题库管理中新增或导入题目。' : '没有符合条件的题目，请调整关键词或题型。'"
+            @selection-change="handleQuestionSelection"
+          >
+            <el-table-column type="selection" width="50" />
+            <el-table-column label="题干" min-width="280">
+              <template #default="{ row }">{{ getQuestionPreview(row.stem) }}</template>
+            </el-table-column>
+            <el-table-column label="题型" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.type === 'choice' ? '' : 'success'" size="small" effect="plain">
+                  {{ getQuestionTypeLabel(row.type) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <aside class="selected-question-panel">
+          <div class="selected-question-header">
+            <strong>已选题目（{{ draftSelectedQuestionIds.length }}）</strong>
+            <el-button text size="small" :disabled="draftSelectedQuestionIds.length === 0" @click="clearDraftQuestions">清空</el-button>
+          </div>
+          <div v-if="selectedQuestions.length === 0" class="selected-question-empty">
+            尚未选择题目，可以从左侧题库加入。
+          </div>
+          <div v-else class="selected-question-list">
+            <div v-for="item in selectedQuestions" :key="item.id" class="selected-question-item">
+              <div class="selected-question-main">
+                <el-tag :type="item.type === 'choice' ? '' : 'success'" size="small" effect="plain">
+                  {{ getQuestionTypeLabel(item.type) }}
+                </el-tag>
+                <span>{{ getQuestionPreview(item.stem, 34) }}</span>
+              </div>
+              <el-button type="danger" text size="small" @click="removeDraftQuestion(item.id)">移除</el-button>
+            </div>
+          </div>
+        </aside>
+      </div>
       <template #footer>
         <el-button @click="questionDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="confirmQuestions">确定</el-button>
@@ -296,5 +477,113 @@ onMounted(async () => {
 
 .time-row > .form-group {
   flex: 1;
+}
+
+.question-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+
+.question-library {
+  min-width: 0;
+}
+
+.question-filter-bar,
+.question-batch-row,
+.selected-question-header,
+.selected-question-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.question-filter-bar,
+.question-batch-row {
+  margin-bottom: var(--space-md);
+}
+
+.question-count-input {
+  width: 96px;
+}
+
+.question-result-count {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.selected-question-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  min-height: 520px;
+  background: var(--color-bg-alt);
+}
+
+.selected-question-header {
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.selected-question-empty {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  padding: var(--space-xl) var(--space-sm);
+  text-align: center;
+}
+
+.selected-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.selected-question-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.selected-question-main {
+  align-items: flex-start;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.selected-question-main span:last-child {
+  min-width: 0;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .question-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .selected-question-panel {
+    min-height: auto;
+  }
+
+  .question-filter-bar,
+  .question-batch-row {
+    flex-wrap: wrap;
+  }
+
+  .question-result-count {
+    margin-left: 0;
+  }
 }
 </style>

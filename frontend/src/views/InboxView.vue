@@ -28,6 +28,10 @@ async function handleRead(item: Announcement) {
 }
 
 async function handleComplete(item: Announcement) {
+  if (isExpired(item)) {
+    ElMessage.warning('该任务已截止，无法标记完成')
+    return
+  }
   try {
     await recordCompletion(item.id)
     ElMessage.success('已标记完成')
@@ -41,6 +45,12 @@ async function handleComplete(item: Announcement) {
 function isExpired(item: Announcement) {
   if (!item.end_time) return false
   return new Date(item.end_time) < new Date()
+}
+
+/** 判断任务是否尚未开始 */
+function isNotStarted(item: Announcement) {
+  if (!item.start_time) return false
+  return new Date(item.start_time) > new Date()
 }
 
 function formatDate(dateStr: string) {
@@ -80,7 +90,11 @@ function formatDate(dateStr: string) {
             v-for="item in announcements"
             :key="item.id"
             class="inbox-item"
-            :class="{ unread: !item.is_read }"
+            :class="{
+              unread: !item.is_read,
+              'expired-card': isExpired(item),
+              'not-started-card': isNotStarted(item),
+            }"
             @click="handleRead(item)"
           >
             <div class="item-dot" v-if="!item.is_read"></div>
@@ -104,15 +118,31 @@ function formatDate(dateStr: string) {
               </div>
               <div v-if="item.question_ids.length > 0" class="item-quiz">
                 <span>包含 {{ item.question_ids.length }} 道题目</span>
-                <router-link :to="`/practice`" class="quiz-link">去练习</router-link>
+                <router-link
+                  v-if="!isExpired(item) && !isNotStarted(item)"
+                  :to="`/practice`"
+                  class="quiz-link"
+                >去练习</router-link>
+                <span v-else class="quiz-link-disabled">{{ isExpired(item) ? '已截止' : '未开始' }}</span>
               </div>
-              <div v-if="item.end_time" class="item-time">
-                <span :class="{ expired: isExpired(item) }">
+              <div class="item-time">
+                <span v-if="item.start_time && isNotStarted(item)" class="not-started">
+                  未开始: {{ formatDate(item.start_time) }}
+                </span>
+                <span v-if="item.end_time" :class="{ expired: isExpired(item) }">
                   {{ isExpired(item) ? '已截止' : '截止' }}: {{ formatDate(item.end_time) }}
                 </span>
               </div>
               <div v-if="item.is_read" class="item-actions">
-                <el-button size="small" type="primary" plain round @click.stop="handleComplete(item)">标记完成</el-button>
+                <el-button
+                  v-if="!isExpired(item)"
+                  size="small"
+                  type="primary"
+                  plain
+                  round
+                  @click.stop="handleComplete(item)"
+                >标记完成</el-button>
+                <el-button v-else size="small" disabled round>已截止</el-button>
               </div>
             </div>
           </div>
@@ -270,6 +300,33 @@ function formatDate(dateStr: string) {
 .item-time .expired {
   color: #ef4444;
   font-weight: 600;
+}
+
+.item-time .not-started {
+  color: #f59e0b;
+  font-weight: 600;
+  margin-right: var(--space-md);
+}
+
+.expired-card {
+  opacity: 0.55;
+  background: var(--color-bg-muted, #f5f5f5) !important;
+  border-color: var(--color-border-light) !important;
+}
+
+.expired-card:hover {
+  box-shadow: none !important;
+}
+
+.not-started-card {
+  opacity: 0.7;
+  background: rgba(245, 158, 11, 0.03) !important;
+}
+
+.quiz-link-disabled {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 .item-actions {

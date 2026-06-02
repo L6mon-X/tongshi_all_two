@@ -152,6 +152,12 @@ const router = createRouter({
           meta: { title: '学生成绩' },
         },
         {
+          path: 'task-report',
+          name: 'teacher-task-report',
+          component: () => import('../views/teacher/TeacherTaskReport.vue'),
+          meta: { title: '任务完成' },
+        },
+        {
           path: 'student-admin',
           name: 'teacher-student-admin',
           component: () => import('../views/teacher/TeacherStudentAdmin.vue'),

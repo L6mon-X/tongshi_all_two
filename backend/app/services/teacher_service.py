@@ -1,6 +1,17 @@
 """Teacher service"""
 from sqlalchemy.orm import Session
-from app.models.entities import User, Course, Project, QuizAttempt, StudentProgress, StudentClassEnrollment, Class
+from app.models.entities import (
+    Announcement,
+    AnnouncementClass,
+    Class,
+    Course,
+    Project,
+    QuizAttempt,
+    StudentProgress,
+    StudentClassEnrollment,
+    TaskCompletion,
+    User,
+)
 
 
 def _teacher_class_ids(db: Session, teacher_id: str) -> list[int]:
@@ -72,6 +83,51 @@ def list_students(db: Session, teacher_id: str, class_id: int = None, page: int 
         students = query.offset((page - 1) * page_size).limit(page_size).all()
     else:
         students = query.all()
+
+    student_ids = [s.id for s in students]
+    student_class_ids: dict[str, set[int]] = {student_id: set() for student_id in student_ids}
+    class_task_ids: dict[int, set[int]] = {}
+    completed_task_ids: dict[str, set[int]] = {student_id: set() for student_id in student_ids}
+
+    if student_ids:
+        enrollment_rows = (
+            db.query(StudentClassEnrollment.user_id, StudentClassEnrollment.class_id)
+            .filter(
+                StudentClassEnrollment.user_id.in_(student_ids),
+                StudentClassEnrollment.class_id.in_(class_ids),
+            )
+            .all()
+        )
+        for user_id, owned_class_id in enrollment_rows:
+            student_class_ids.setdefault(user_id, set()).add(owned_class_id)
+
+        task_rows = (
+            db.query(Announcement.id, AnnouncementClass.class_id)
+            .join(AnnouncementClass, AnnouncementClass.announcement_id == Announcement.id)
+            .filter(
+                Announcement.teacher_id == teacher_id,
+                Announcement.type == "quiz",
+                AnnouncementClass.class_id.in_(class_ids),
+            )
+            .all()
+        )
+        all_task_ids: set[int] = set()
+        for task_id, owned_class_id in task_rows:
+            class_task_ids.setdefault(owned_class_id, set()).add(task_id)
+            all_task_ids.add(task_id)
+
+        if all_task_ids:
+            completion_rows = (
+                db.query(TaskCompletion.user_id, TaskCompletion.announcement_id)
+                .filter(
+                    TaskCompletion.user_id.in_(student_ids),
+                    TaskCompletion.announcement_id.in_(all_task_ids),
+                )
+                .all()
+            )
+            for user_id, task_id in completion_rows:
+                completed_task_ids.setdefault(user_id, set()).add(task_id)
+
     result = []
     for s in students:
         progresses = (
@@ -97,6 +153,13 @@ def list_students(db: Session, teacher_id: str, class_id: int = None, page: int 
         enrollment = enrollment_query.order_by(StudentClassEnrollment.enrolled_at.desc()).first()
         class_id_value = enrollment[1].id if enrollment else None
         class_name = enrollment[1].name if enrollment else ""
+        assigned_task_ids: set[int] = set()
+        for owned_class_id in student_class_ids.get(s.id, set()):
+            assigned_task_ids.update(class_task_ids.get(owned_class_id, set()))
+        completed_count = len(assigned_task_ids & completed_task_ids.get(s.id, set()))
+        total_task_count = len(assigned_task_ids)
+        incomplete_count = max(total_task_count - completed_count, 0)
+        task_completion_rate = int(round(completed_count / total_task_count * 100)) if total_task_count else 0
 
         result.append({
             "id": s.id,
@@ -107,6 +170,9 @@ def list_students(db: Session, teacher_id: str, class_id: int = None, page: int 
             "progress": avg_progress,
             "exercises": total_done,
             "accuracy": avg_accuracy,
+            "completed_tasks": completed_count,
+            "incomplete_tasks": incomplete_count,
+            "task_completion_rate": task_completion_rate,
         })
     return result, total
 

@@ -146,7 +146,7 @@ onMounted(fetchTeachers)
     >
       <el-table-column prop="id" label="工号" width="140" />
       <el-table-column prop="name" label="姓名" width="120" />
-      <el-table-column prop="major" label="专业" min-width="150">
+      <el-table-column prop="major" label="学院" min-width="150">
         <template #default="{ row }">
           {{ row.major || '-' }}
         </template>
@@ -207,7 +207,7 @@ onMounted(fetchTeachers)
         <el-form-item label="姓名" required>
           <el-input v-model="addForm.name" placeholder="请输入姓名" clearable />
         </el-form-item>
-        <el-form-item label="专业">
+        <el-form-item label="学院">
           <el-input v-model="addForm.major" placeholder="选填" clearable />
         </el-form-item>
       </el-form>

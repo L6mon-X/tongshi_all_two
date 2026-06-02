@@ -31,6 +31,21 @@ export interface CompletionReport {
   is_expired: boolean
 }
 
+export interface TaskOverview {
+  total_tasks: number
+  total_completed: number
+  total_incomplete: number
+  tasks: {
+    id: number
+    title: string
+    class_names: string[]
+    total_students: number
+    completed_count: number
+    is_expired: boolean
+    created_at: string
+  }[]
+}
+
 export function getAnnouncements() {
   return http.get<any, Announcement[]>('/announcements')
 }
@@ -68,4 +83,8 @@ export function recordCompletion(id: number) {
 
 export function getCompletionReport(id: number) {
   return http.get<any, CompletionReport>(`/announcements/${id}/completion-report`)
+}
+
+export function getTaskOverview() {
+  return http.get<any, TaskOverview>('/announcements/task-overview')
 }

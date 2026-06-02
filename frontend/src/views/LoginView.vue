@@ -146,13 +146,13 @@ async function handleFirstLoginChange() {
                     fill="white" font-family="sans-serif">探</text>
             </svg>
           </div>
-          <h1>探 · 练 · 创 · 行</h1>
+          <h1>学 · 思 · 践 · 悟</h1>
           <p>AI 通识课教学平台</p>
           <div class="brand-modules">
-            <span class="bm" style="color: var(--color-learn)">探 · 学</span>
-            <span class="bm" style="color: var(--color-practice)">练 · 习</span>
-            <span class="bm" style="color: var(--color-create)">造 · 创</span>
-            <span class="bm" style="color: var(--color-act)">行 · 动</span>
+            <span class="bm" style="color: white">学 · 探</span>
+            <span class="bm" style="color: white">思 · 习</span>
+            <span class="bm" style="color: white">践 · 创</span>
+            <span class="bm" style="color: white">悟 · 动</span>
           </div>
         </div>
       </div>

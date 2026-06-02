@@ -260,6 +260,9 @@ class StudentOut(BaseModel):
     progress: int = 0
     exercises: int = 0
     accuracy: int = 0
+    completed_tasks: int = 0
+    incomplete_tasks: int = 0
+    task_completion_rate: int = 0
 
 
 class TeacherStatsOut(BaseModel):
