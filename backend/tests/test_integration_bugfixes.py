@@ -108,7 +108,7 @@ class TestTeacherRefactor:
 
     def test_class_without_students_can_be_deleted(self, client, db_session, teacher_token):
         course = db_session.query(Course).filter(Course.created_by == "T001").first()
-        cls = Class(name="空班级", course_id=course.id)
+        cls = Class(name="空班级", course_id=course.id, created_by="T001")
         db_session.add(cls)
         db_session.commit()
 
@@ -147,7 +147,7 @@ class TestTeacherRefactor:
 
     def test_publish_questions_supports_multiple_classes_and_completion_report(self, client, db_session, teacher_token, student_token):
         course = db_session.query(Course).filter(Course.created_by == "T001").first()
-        second_class = Class(name="同课2班", course_id=course.id)
+        second_class = Class(name="同课2班", course_id=course.id, created_by="T001")
         second_student = User(id="2025999", name="同课学生", hashed_password=get_password_hash("abc123"), role="student")
         db_session.add_all([second_class, second_student])
         db_session.flush()

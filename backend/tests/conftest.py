@@ -52,8 +52,8 @@ def _seed_test_data(session):
     session.flush()
 
     # 班级 + 注册
-    cls = Class(name="2025级1班", course_id=course.id)
-    other_cls = Class(name="2025级2班", course_id=other_course.id)
+    cls = Class(name="2025级1班", course_id=course.id, created_by="T001")
+    other_cls = Class(name="2025级2班", course_id=other_course.id, created_by="T002")
     session.add_all([cls, other_cls])
     session.flush()
     session.add(StudentClassEnrollment(user_id="2025001", class_id=cls.id))
