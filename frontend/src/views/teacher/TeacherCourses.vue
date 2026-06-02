@@ -60,7 +60,7 @@ async function handleAddOneCourse(course: Course) {
   if (isAlreadyOwned(course) || addingCourseIds.value.has(course.id)) return
   addingCourseIds.value = new Set([...addingCourseIds.value, course.id])
   try {
-    await createCourse({ name: course.name, is_public: false })
+    await createCourse({ name: course.name })
     addedCourseIds.value = new Set([...addedCourseIds.value, course.id])
     await loadCourses()
   } catch {

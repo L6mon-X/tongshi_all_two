@@ -171,10 +171,10 @@ async function handleFirstLoginChange() {
           <div class="form-group">
             <label>密码</label>
             <el-input v-model="form.password" type="password" placeholder="请输入密码"
-                      size="large" show-password @keyup.enter="handleLogin" />
+                      size="large" show-password @keyup.enter.prevent="handleLogin" />
           </div>
 
-          <el-button type="primary" size="large" round :loading="loading"
+          <el-button type="primary" size="large" round native-type="button" :loading="loading"
                      class="btn-submit" @click="handleLogin">
             登录
           </el-button>

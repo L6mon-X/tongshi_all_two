@@ -6,6 +6,7 @@ from app.api.v1.routes.class_routes import router as class_router
 from app.api.v1.routes.announcement_routes import router as announcement_router
 from app.api.v1.routes.material_routes import router as material_router
 from app.api.v1.routes.question_routes import router as question_router
+from app.api.v1.routes.course_routes import router as course_router
 from app.api.v1.routes.quiz_routes import router as quiz_router
 from app.api.v1.routes.project_routes import router as project_router
 from app.api.v1.routes.teacher_routes import router as teacher_router
@@ -22,6 +23,7 @@ api_router.include_router(class_router)
 api_router.include_router(announcement_router)
 api_router.include_router(material_router)
 api_router.include_router(question_router)
+api_router.include_router(course_router)
 api_router.include_router(quiz_router)
 api_router.include_router(project_router)
 api_router.include_router(teacher_router)

@@ -37,6 +37,7 @@ Announcement -> AnnouncementClass -> Class
 - `/teacher/classes`：班级管理
 - `/teacher/publish`：发布题目
 - `/teacher/grades`：学生成绩
+- `/teacher/task-report`：任务完成报告
 - `/teacher/reviews`：作品审核
 - `/teacher/materials`：资料管理
 - `/teacher/student-admin`：学生管理

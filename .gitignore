@@ -44,7 +44,7 @@ AGENTS.md
 .qoder/
 CLAUDE.md
 graphify-out/
-
+.codex/
 # 7. 本地缓存与工具脚本
 .python-version
 backend/.seed_lock

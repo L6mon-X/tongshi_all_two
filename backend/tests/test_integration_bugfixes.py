@@ -77,6 +77,37 @@ class TestTeacherRefactor:
         resp = client.delete(f"/api/questions/courses/{course_id}", headers=auth_header(teacher_token))
         assert resp.json()["code"] == 0
 
+    def test_create_public_course_keeps_public_flag(self, client, teacher_token):
+        create_data = client.post(
+            "/api/questions/courses",
+            json={"name": "公共课程测试", "is_public": True},
+            headers=auth_header(teacher_token),
+        ).json()
+        assert create_data["code"] == 0
+
+        courses = client.get("/api/questions/courses", headers=auth_header(teacher_token)).json()["data"]
+        created = next(item for item in courses if item["id"] == create_data["data"]["id"])
+        assert created["is_public"] is True
+        assert created["is_owner"] is True
+
+    def test_student_without_class_gets_empty_course_hint(self, client, db_session):
+        student = User(
+            id="2025888",
+            name="未入班学生",
+            hashed_password=get_password_hash("abc123"),
+            role="student",
+            major="测试",
+        )
+        db_session.add(student)
+        db_session.commit()
+        token = client.post("/api/token", json={"id": "2025888", "password": "abc123"}).json()["data"]["access_token"]
+
+        resp = client.get("/api/questions/courses", headers=auth_header(token))
+        data = resp.json()
+
+        assert data["code"] == 0
+        assert data["data"] == {"courses": [], "hint": "你尚未加入任何班级，请联系老师"}
+
     def test_classes_are_filtered_by_teacher_and_course(self, client, teacher_token, other_teacher_token):
         t1 = client.get("/api/classes", headers=auth_header(teacher_token)).json()
         t2 = client.get("/api/classes", headers=auth_header(other_teacher_token)).json()

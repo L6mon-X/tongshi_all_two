@@ -13,9 +13,19 @@ export interface Course {
 }
 
 export type CourseDetail = Course
+export interface CourseListResult {
+  courses: Course[]
+  hint: string | null
+}
 
-export function getCourses() {
-  return http.get<any, Course[]>('/questions/courses')
+function normalizeCourseList(data: Course[] | CourseListResult): Course[] {
+  if (Array.isArray(data)) return data
+  return data.courses
+}
+
+export async function getCourses() {
+  const data = await http.get<any, Course[] | CourseListResult>('/questions/courses')
+  return normalizeCourseList(data)
 }
 
 export function getCourseDetail(id: number) {

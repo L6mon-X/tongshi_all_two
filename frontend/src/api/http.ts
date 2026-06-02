@@ -27,6 +27,10 @@ function getErrorMessage(error: unknown) {
   return error.message || '网络错误'
 }
 
+function isLoginRequest(url?: string) {
+  return url === '/token' || url?.endsWith('/token')
+}
+
 // 请求拦截器：自动带 JWT token
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token')
@@ -43,6 +47,9 @@ http.interceptors.response.use(
     if (code !== 0) {
       // 401 清除登录状态，跳转登录
       if (code === 401) {
+        if (isLoginRequest(response.config.url)) {
+          return Promise.reject(new Error(message || '账号或密码错误'))
+        }
         localStorage.removeItem('auth_user')
         localStorage.removeItem('auth_token')
         window.location.href = '/login'
@@ -56,6 +63,9 @@ http.interceptors.response.use(
   (error) => {
     // HTTP 401（FastAPI/Starlette 层面返回的，非 BusinessException）
     if (error.response?.status === 401) {
+      if (isLoginRequest(error.config?.url)) {
+        return Promise.reject(new Error(getErrorMessage(error)))
+      }
       localStorage.removeItem('auth_user')
       localStorage.removeItem('auth_token')
       window.location.href = '/login'

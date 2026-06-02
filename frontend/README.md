@@ -24,6 +24,7 @@
 | `/teacher/students` | `src/views/teacher/TeacherStudents.vue` | 教师端学生数据 |
 | `/teacher/classes` | `src/views/teacher/TeacherClasses.vue` | 教师端班级管理 |
 | `/teacher/announcements` | `src/views/teacher/TeacherAnnouncements.vue` | 教师端公告/任务管理 |
+| `/teacher/task-report` | `src/views/teacher/TeacherTaskReport.vue` | 教师端任务完成报告 |
 | `/teacher/reviews` | `src/views/teacher/TeacherReviews.vue` | 教师端作品审核 |
 | `/admin/teachers` | `src/views/admin/AdminTeachers.vue` | 管理员端教师账号管理 |
 | `/admin/showcase` | `src/views/admin/AdminShowcase.vue` | 管理员端悟页面内容管理 |

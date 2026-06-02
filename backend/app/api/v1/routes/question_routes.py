@@ -16,12 +16,12 @@ from app.core.response import success
 from app.core.exceptions import BusinessException
 from app.core.upload_validation import validate_upload, ALLOWED_EXCEL_EXTENSIONS, MAX_EXCEL_SIZE
 from app.schemas.common import AuthUser, QuestionCreate, QuestionUpdate, CourseCreateRequest, CourseUpdateRequest
+from app.services.course_response_service import build_course_detail, build_course_list
 from app.services.question_service import (
     list_questions, create_question, update_question, delete_question,
-    get_course_questions, list_courses, create_course, update_course, delete_course,
+    get_course_questions, create_course, update_course, delete_course,
     get_course_detail, import_questions_from_excel,
 )
-from app.models.entities import Class, Course, StudentClassEnrollment
 
 router = APIRouter(prefix="/questions", tags=["questions"])
 
@@ -80,34 +80,10 @@ def remove_question(question_id: int, db: Session = Depends(get_db), current_use
 
 @router.get("/courses", summary="课程列表", description="获取所有课程")
 def get_courses(db: Session = Depends(get_db), current_user: AuthUser = Depends(get_current_user)):
-    if current_user.role == "teacher":
-        courses = list_courses(db, current_user.id)
-    elif current_user.role == "student":
-        courses = (
-            db.query(Course)
-            .join(Class, Class.course_id == Course.id)
-            .join(StudentClassEnrollment, StudentClassEnrollment.class_id == Class.id)
-            .filter(StudentClassEnrollment.user_id == current_user.id)
-            .order_by(Course.id.desc())
-            .all()
-        )
-    else:
-        courses = list_courses(db)
-    return success([{
-        "id": c.id,
-        "name": c.name,
-        "created_at": c.created_at.isoformat() if c.created_at else "",
-        "created_by": c.created_by,
-        "is_public": bool(c.is_public),
-        "is_owner": c.created_by == current_user.id,
-        "material_count": len(c.materials),
-        "question_count": len(c.questions),
-        "class_count": (
-            db.query(Class).filter(Class.course_id == c.id, Class.created_by == current_user.id).count()
-            if current_user.role == "teacher"
-            else len(c.classes)
-        ),
-    } for c in courses])
+    data = build_course_list(db, current_user)
+    if current_user.role == "student" and isinstance(data, dict) and data.get("hint") is None:
+        return success(data["courses"])
+    return success(data)
 
 
 @router.post("/courses", summary="创建课程", description="教师端：创建新课程")
@@ -126,22 +102,7 @@ def get_course(
     detail = get_course_detail(db, course_id, teacher_id)
     if not detail:
         raise BusinessException(404, "课程不存在")
-    course, material_count, question_count, class_count = detail
-    return success({
-        "id": course.id,
-        "name": course.name,
-        "created_at": course.created_at.isoformat() if course.created_at else "",
-        "created_by": course.created_by,
-        "is_public": bool(course.is_public),
-        "is_owner": course.created_by == current_user.id,
-        "material_count": material_count,
-        "question_count": question_count,
-        "class_count": (
-            db.query(Class).filter(Class.course_id == course.id, Class.created_by == current_user.id).count()
-            if current_user.role == "teacher"
-            else class_count
-        ),
-    })
+    return success(build_course_detail(db, detail, current_user))
 
 
 @router.put("/courses/{course_id}", summary="修改课程名称", description="教师端：修改指定课程的名称")

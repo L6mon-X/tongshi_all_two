@@ -1,43 +1,55 @@
 /* ============================================
    学·思·践·悟  AI通识课平台  —  Design System
-   书卷墨韵 · 东方人文气质
    ============================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap');
 
 :root {
   /* ── 品牌色（墨色层级）── */
-  --color-primary: #2d5a6e;         /* 靛青 - 主色，取自传统靛染 */
+  --color-primary: #2d5a6e;
+  /* 靛青 - 主色，取自传统靛染 */
   --color-primary-light: #4a8fa6;
   --color-primary-dark: #1a3d4d;
   --color-primary-glow: rgba(45, 90, 110, 0.10);
 
   /* ── 功能色（传统色谱）── */
-  --color-learn: #2d6a7a;           /* 学 - 靛青 */
+  --color-learn: #2d6a7a;
+  /* 学 - 靛青 */
   --color-learn-light: #a8d4e0;
   --color-learn-bg: rgba(45, 106, 122, 0.05);
 
-  --color-create: #b8860b;          /* 造 - 琥珀/藤黄 */
+  --color-create: #b8860b;
+  /* 造 - 琥珀/藤黄 */
   --color-create-light: #f0d68a;
   --color-create-bg: rgba(184, 134, 11, 0.05);
 
-  --color-practice: #6b4c8a;        /* 练 - 紫藤 */
+  --color-practice: #6b4c8a;
+  /* 练 - 紫藤 */
   --color-practice-light: #c4aedd;
   --color-practice-bg: rgba(107, 76, 138, 0.05);
 
-  --color-act: #3a7d5c;             /* 行 - 翠绿 */
+  --color-act: #3a7d5c;
+  /* 行 - 翠绿 */
   --color-act-light: #a7d4b8;
   --color-act-bg: rgba(58, 125, 92, 0.05);
 
   /* ── 中性色（暖调）── */
-  --color-bg: #f8f5ef;              /* 米白暖底 */
-  --color-bg-alt: #f1ece2;          /* 暖灰交替背景 */
-  --color-bg-card: #fffdf8;         /* 宣纸白 */
-  --color-text: #1a1a2e;            /* 浓墨 */
-  --color-text-secondary: #4a4a5a;  /* 淡墨 */
-  --color-text-muted: #8a8a96;      /* 残墨 */
-  --color-border: #e0d8c8;          /* 暖边框 */
-  --color-border-light: #ebe4d6;    /* 淡暖边框 */
+  --color-bg: #f8f5ef;
+  /* 米白暖底 */
+  --color-bg-alt: #f1ece2;
+  /* 暖灰交替背景 */
+  --color-bg-card: #fffdf8;
+  /* 宣纸白 */
+  --color-text: #1a1a2e;
+  /* 浓墨 */
+  --color-text-secondary: #4a4a5a;
+  /* 淡墨 */
+  --color-text-muted: #8a8a96;
+  /* 残墨 */
+  --color-border: #e0d8c8;
+  /* 暖边框 */
+  --color-border-light: #ebe4d6;
+  /* 淡暖边框 */
 
   /* ── 渐变 ── */
   --gradient-hero: linear-gradient(135deg, #1a1a2e 0%, #2a2a40 30%, #2d5a6e 70%, #3a7d5c 100%);
@@ -129,11 +141,13 @@ a {
   color: inherit;
 }
 
-ul, ol {
+ul,
+ol {
   list-style: none;
 }
 
-img, video {
+img,
+video {
   max-width: 100%;
   display: block;
 }
@@ -171,7 +185,7 @@ a:focus-visible {
   opacity: 0;
   transform: translateY(30px);
   transition: opacity var(--duration-slow) var(--ease-out),
-              transform var(--duration-slow) var(--ease-out);
+    transform var(--duration-slow) var(--ease-out);
 }
 
 .fade-up.visible {

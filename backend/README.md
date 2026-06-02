@@ -21,12 +21,12 @@ backend/
 │   │       ├── auth_routes.py    # 登录、注册、获取当前用户
 │   │       ├── chapter_routes.py # 章节列表、详情、状态/排课更新
 │   │       ├── material_routes.py# 学习资料（视频/PDF）CRUD
-│   │       ├── question_routes.py# 题库 CRUD + Excel 导入 + 课程管理
+│   │       ├── question_routes.py# 题库 CRUD + Excel 导入（按题型模板）+ 课程管理
 │   │       ├── quiz_routes.py    # 答题提交、历史、统计
 │   │       ├── project_routes.py # 作品广场、提交、点赞
-│   │       ├── teacher_routes.py # 教师工作台、审核、批量下载
+│   │       ├── teacher_routes.py # 教师工作台、审核、批量下载、学生成绩导出、批量删除
 │   │       ├── class_routes.py   # 班级管理 + Excel 批量导入学生
-│   │       ├── announcement_routes.py  # 公告/任务发布、已读/完成追踪
+│   │       ├── announcement_routes.py  # 公告/任务发布、已读/完成追踪、任务总览/完成报告
 │   │       ├── portfolio_routes.py     # 学生成长档案（雷达图+统计）
 │   │       ├── upload_routes.py # 通用文件上传（含魔数校验）
 │   │       ├── file_routes.py   # 统一文件访问 GET /api/files/{file_id}
