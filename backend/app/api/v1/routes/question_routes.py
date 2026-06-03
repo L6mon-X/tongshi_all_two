@@ -19,7 +19,7 @@ from app.schemas.common import AuthUser, QuestionCreate, QuestionUpdate, CourseC
 from app.services.course_response_service import build_course_detail, build_course_list
 from app.services.question_service import (
     list_questions, create_question, update_question, delete_question,
-    get_course_questions, create_course, update_course, delete_course,
+    get_course_questions, create_course, add_public_course, update_course, delete_course,
     get_course_detail, import_questions_from_excel,
 )
 
@@ -36,6 +36,8 @@ def _format_question(q):
         "options": q.options or [],
         "answer": q.answer,
         "explanation": q.explanation or "",
+        "source_question_id": q.source_question_id,
+        "is_synced": bool(q.source_question_id),
     }
 
 
@@ -88,7 +90,13 @@ def get_courses(db: Session = Depends(get_db), current_user: AuthUser = Depends(
 
 @router.post("/courses", summary="创建课程", description="教师端：创建新课程")
 def add_course(data: CourseCreateRequest, db: Session = Depends(get_db), current_user: AuthUser = Depends(require_role("teacher"))):
-    course = create_course(db, data.name.strip(), current_user.id, data.is_public)
+    course = create_course(db, data.name.strip(), current_user.id, False)
+    return success({"id": course.id})
+
+
+@router.post("/courses/{course_id}/add", summary="添加公共课程", description="教师端：将公共课程添加为自己的课程")
+def add_public_course_to_teacher(course_id: int, db: Session = Depends(get_db), current_user: AuthUser = Depends(require_role("teacher"))):
+    course = add_public_course(db, course_id, current_user.id)
     return success({"id": course.id})
 
 
@@ -107,7 +115,7 @@ def get_course(
 
 @router.put("/courses/{course_id}", summary="修改课程名称", description="教师端：修改指定课程的名称")
 def edit_course(course_id: int, data: CourseUpdateRequest, db: Session = Depends(get_db), current_user: AuthUser = Depends(require_role("teacher"))):
-    course = update_course(db, course_id, data.name.strip(), current_user.id, data.is_public)
+    course = update_course(db, course_id, data.name.strip(), current_user.id)
     if not course:
         raise BusinessException(404, "课程不存在")
     return success()

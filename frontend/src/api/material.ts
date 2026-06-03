@@ -12,6 +12,8 @@ export interface Material {
   size: string
   date: string
   file_id?: number
+  source_material_id?: number | null
+  is_synced?: boolean
 }
 
 export interface MaterialCreatePayload {

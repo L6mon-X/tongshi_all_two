@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  addPublicCourse,
   createCourse,
   deleteCourse,
   getCourses,
@@ -15,8 +16,8 @@ const loading = ref(true)
 const router = useRouter()
 const publicSearchKeyword = ref('')
 
-const myCourses = computed(() => courses.value.filter(course => !course.is_public))
-const publicCourses = computed(() => courses.value.filter(course => course.is_public))
+const myCourses = computed(() => courses.value.filter(course => course.is_owner))
+const publicCourses = computed(() => courses.value.filter(course => course.is_public && !course.is_owner))
 const filteredPublicCourses = computed(() => {
   const keyword = publicSearchKeyword.value.trim().toLowerCase()
   if (!keyword) return publicCourses.value
@@ -28,7 +29,6 @@ const isEdit = ref(false)
 const editingId = ref<number | null>(null)
 const formData = reactive({
   name: '',
-  is_public: false,
 })
 const saving = ref(false)
 
@@ -47,7 +47,7 @@ function isAlreadyOwned(course: Course) {
 
 const searchablePublicCourses = computed(() => {
   const keyword = addSearchKeyword.value.trim().toLowerCase()
-  let list = publicCourses.value.filter(c => !c.is_owner)
+  let list = publicCourses.value
   if (keyword) list = list.filter(c => c.name.toLowerCase().includes(keyword))
   return [...list].sort((a, b) => {
     const aAdded = isAlreadyOwned(a) ? 0 : 1
@@ -60,9 +60,10 @@ async function handleAddOneCourse(course: Course) {
   if (isAlreadyOwned(course) || addingCourseIds.value.has(course.id)) return
   addingCourseIds.value = new Set([...addingCourseIds.value, course.id])
   try {
-    await createCourse({ name: course.name })
+    await addPublicCourse(course.id)
     addedCourseIds.value = new Set([...addedCourseIds.value, course.id])
     await loadCourses()
+    ElMessage.success('课程添加成功')
   } catch {
     ElMessage.error('添加失败，请稍后重试')
   } finally {
@@ -97,19 +98,17 @@ function openCreate() {
   isEdit.value = false
   editingId.value = null
   formData.name = ''
-  formData.is_public = false
   dialogVisible.value = true
 }
 
 function openEdit(course: Course) {
-  if (course.is_public && !course.is_owner) {
-    ElMessage.warning('公共课程只能由创建者编辑')
+  if (!course.is_owner) {
+    ElMessage.warning('只能编辑自己的课程')
     return
   }
   isEdit.value = true
   editingId.value = course.id
   formData.name = course.name
-  formData.is_public = Boolean(course.is_public)
   dialogVisible.value = true
 }
 
@@ -122,10 +121,10 @@ async function handleSave() {
   saving.value = true
   try {
     if (isEdit.value && editingId.value !== null) {
-      await updateCourse(editingId.value, { name, is_public: formData.is_public })
+      await updateCourse(editingId.value, { name })
       ElMessage.success('课程更新成功')
     } else {
-      await createCourse({ name, is_public: formData.is_public })
+      await createCourse({ name })
       ElMessage.success('课程创建成功')
     }
     dialogVisible.value = false
@@ -138,8 +137,8 @@ async function handleSave() {
 }
 
 async function handleDelete(course: Course) {
-  if (course.is_public && !course.is_owner) {
-    ElMessage.warning('公共课程只能由创建者删除')
+  if (!course.is_owner) {
+    ElMessage.warning('只能删除自己的课程')
     return
   }
   try {
@@ -239,7 +238,6 @@ function formatDate(dateStr: string) {
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button text size="small" @click="openMaterials(row)">查看资料</el-button>
-          <el-button v-if="row.is_owner" type="danger" text size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -276,9 +274,6 @@ function formatDate(dateStr: string) {
           show-word-limit
           @keyup.enter="handleSave"
         />
-      </div>
-      <div class="form-group">
-        <el-checkbox v-model="formData.is_public">设为公共课程</el-checkbox>
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -324,7 +319,6 @@ function formatDate(dateStr: string) {
             <el-button
               v-if="!isAlreadyOwned(row)"
               type="primary"
-              text
               size="small"
               :loading="addingCourseIds.has(row.id)"
               @click="handleAddOneCourse(row)"

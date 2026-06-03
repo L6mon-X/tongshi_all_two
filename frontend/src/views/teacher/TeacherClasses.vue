@@ -26,8 +26,7 @@ const form = reactive({
 
 async function loadCourses() {
   const all = await getCourses()
-  // 只保留已添加课程（非公共课程），不显示未添加的公共课程
-  courses.value = all.filter(c => !c.is_public)
+  courses.value = all.filter(course => course.is_owner)
 }
 
 async function loadClasses() {

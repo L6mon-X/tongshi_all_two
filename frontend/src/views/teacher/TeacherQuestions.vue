@@ -5,6 +5,7 @@ import { createQuestion, deleteQuestion, downloadQuestionTemplate, getQuestions,
 import { getCourses, type Course } from '@/api/course'
 
 const courses = ref<Course[]>([])
+const writableCourses = ref<Course[]>([])
 const questions = ref<Question[]>([])
 const loading = ref(true)
 const filterCourse = ref<number | ''>('')
@@ -26,7 +27,9 @@ const form = reactive({
 })
 
 async function loadCourses() {
-  courses.value = await getCourses()
+  const all = await getCourses()
+  courses.value = all
+  writableCourses.value = all.filter(course => course.is_owner)
 }
 
 async function loadQuestions() {
@@ -205,7 +208,10 @@ onMounted(async () => {
       <el-table-column type="index" label="序号" width="70" />
       <el-table-column label="题干" min-width="260">
         <template #default="{ row }">
-          {{ row.stem.length > 48 ? row.stem.slice(0, 48) + '…' : row.stem }}
+          <span>{{ row.stem.length > 48 ? row.stem.slice(0, 48) + '…' : row.stem }}</span>
+          <el-tag v-if="row.is_synced" class="synced-tag" size="small" type="info" effect="plain">
+            公共同步
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="题型" width="100">
@@ -218,8 +224,9 @@ onMounted(async () => {
       <el-table-column prop="course_name" label="所属课程" min-width="160" />
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
-          <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button type="danger" text size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="!row.is_synced" text size="small" @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="!row.is_synced" type="danger" text size="small" @click="handleDelete(row)">删除</el-button>
+          <span v-else class="readonly-text">只读</span>
         </template>
       </el-table-column>
     </el-table>
@@ -232,7 +239,7 @@ onMounted(async () => {
       <div class="form-group">
         <label>所属课程</label>
         <el-select v-model="form.course_id" placeholder="请选择课程" size="large" style="width: 100%">
-          <el-option v-for="course in courses" :key="course.id" :label="course.name" :value="course.id" />
+          <el-option v-for="course in writableCourses" :key="course.id" :label="course.name" :value="course.id" />
         </el-select>
       </div>
       <div class="form-group">
@@ -359,6 +366,15 @@ onMounted(async () => {
 .empty-state {
   padding: var(--space-3xl) 0;
   text-align: center;
+}
+
+.synced-tag {
+  margin-left: var(--space-sm);
+}
+
+.readonly-text {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
 }
 
 .form-group {

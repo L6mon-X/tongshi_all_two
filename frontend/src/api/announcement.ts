@@ -25,10 +25,13 @@ export interface CompletionReport {
   class_names: string[]
   total_students: number
   completed_count: number
-  completed_students: { id: string; name: string; class_id: number; class_name: string }[]
-  incomplete_students: { id: string; name: string; class_id: number; class_name: string }[]
+  completed_students: { id: string; name: string; major: string; class_id: number; class_name: string; score: number; total_questions: number }[]
+  incomplete_students: { id: string; name: string; major: string; class_id: number; class_name: string; score: number; total_questions: number }[]
   per_class: { class_id: number; class_name: string; total: number; completed: number }[]
   is_expired: boolean
+  deadline: string | null
+  created_at: string
+  total_questions: number
 }
 
 export interface TaskOverview {

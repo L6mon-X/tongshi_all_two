@@ -179,6 +179,11 @@ const router = createRouter({
         { path: '', redirect: '/admin/teachers' },
         { path: 'teachers', component: AdminTeachers, meta: { title: '教师管理', role: 'admin' } },
         {
+          path: 'public-courses',
+          component: () => import('../views/admin/AdminPublicCourses.vue'),
+          meta: { title: '公共课程', role: 'admin' },
+        },
+        {
           path: 'showcase',
           component: () => import('../views/admin/AdminShowcase.vue'),
           meta: { title: '内容管理', role: 'admin' },

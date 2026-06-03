@@ -12,7 +12,7 @@ const navItems = [
   { name: '班级管理', path: '/teacher/classes', icon: '&#9881;' },
   { name: '发布作业', path: '/teacher/publish', icon: '&#9993;' },
   { name: '学生成绩', path: '/teacher/grades', icon: '&#9783;' },
-  { name: '任务完成', path: '/teacher/task-report', icon: '&#9745;' },
+  { name: '作业完成', path: '/teacher/task-report', icon: '&#9745;' },
   { name: '作品审核', path: '/teacher/reviews', icon: '&#10003;' },
   { name: '资料管理', path: '/teacher/materials', icon: '&#9776;' },
   { name: '学生管理', path: '/teacher/student-admin', icon: '&#9782;' },

@@ -143,13 +143,20 @@ def ensure_schema_compatibility(engine) -> None:
         _add_column_if_missing(
             conn, inspector, "courses", "is_public", "BOOLEAN NOT NULL DEFAULT 0")
         _add_column_if_missing(
+            conn, inspector, "courses", "source_course_id", "INTEGER")
+        _ensure_course_name_owner_unique(conn, inspector)
+        _add_column_if_missing(
             conn, inspector, "classes", "course_id", "INTEGER")
         _add_column_if_missing(
             conn, inspector, "classes", "created_by", "VARCHAR(32)")
         _add_column_if_missing(
             conn, inspector, "materials", "course_id", "INTEGER")
         _add_column_if_missing(
+            conn, inspector, "materials", "source_material_id", "INTEGER")
+        _add_column_if_missing(
             conn, inspector, "questions", "course_id", "INTEGER")
+        _add_column_if_missing(
+            conn, inspector, "questions", "source_question_id", "INTEGER")
         _add_column_if_missing(
             conn, inspector, "student_progress", "course_id", "INTEGER")
         _add_column_if_missing(
@@ -276,6 +283,26 @@ def _drop_column_if_exists(conn, inspector, table: str, column: str) -> None:
     existing = {c["name"] for c in inspector.get_columns(table)}
     if column in existing:
         conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+
+
+def _ensure_course_name_owner_unique(conn, inspector) -> None:
+    """兼容旧库 courses.name 全局唯一约束，改为同一教师下唯一。"""
+    if conn.dialect.name != "mysql":
+        return
+    if "courses" not in {t for t in inspector.get_table_names()}:
+        return
+
+    indexes = inspector.get_indexes("courses")
+    for index in indexes:
+        if index.get("unique") and index.get("column_names") == ["name"]:
+            conn.execute(text(f"ALTER TABLE courses DROP INDEX {index['name']}"))
+
+    has_owner_unique = any(
+        index.get("unique") and index.get("column_names") == ["name", "created_by"]
+        for index in inspector.get_indexes("courses")
+    )
+    if not has_owner_unique:
+        conn.execute(text("ALTER TABLE courses ADD UNIQUE KEY uq_course_name_created_by (name, created_by)"))
 
 
 def _make_column_nullable(conn, inspector, table: str, column: str, col_type: str) -> None:

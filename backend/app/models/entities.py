@@ -68,6 +68,7 @@ class Course(Base):
     name = Column(String(128), nullable=False)
     created_by = Column(String(32), ForeignKey("users.id"), nullable=False, index=True)
     is_public = Column(Boolean, nullable=False, default=False, index=True)
+    source_course_id = Column(Integer, ForeignKey("courses.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     creator = relationship("User", foreign_keys=[created_by])
@@ -94,6 +95,8 @@ class Material(Base):
     date = Column(String(32), default="")
     file_id = Column(Integer, ForeignKey(
         "stored_files.id"), nullable=True, index=True)
+    source_material_id = Column(Integer, ForeignKey(
+        "materials.id"), nullable=True, index=True)
 
     course = relationship("Course", back_populates="materials")
 
@@ -108,6 +111,8 @@ class Question(Base):
     options = Column(JSON, default=list)
     answer = Column(String(128), nullable=False)
     explanation = Column(Text, default="")
+    source_question_id = Column(Integer, ForeignKey(
+        "questions.id"), nullable=True, index=True)
 
     course = relationship("Course", back_populates="questions")
 

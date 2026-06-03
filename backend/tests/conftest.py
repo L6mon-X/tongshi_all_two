@@ -43,7 +43,8 @@ def _seed_test_data(session):
     other_student = User(id="2025002", name="其它学生", hashed_password=get_password_hash("abc123"), role="student", major="人工智能")
     teacher = User(id="T001", name="测试教师", hashed_password=get_password_hash("abc123"), role="teacher", major="")
     other_teacher = User(id="T002", name="其它教师", hashed_password=get_password_hash("abc123"), role="teacher", major="")
-    session.add_all([student, other_student, teacher, other_teacher])
+    admin = User(id="admin", name="管理员", hashed_password=get_password_hash("admin123"), role="admin", major="")
+    session.add_all([student, other_student, teacher, other_teacher, admin])
 
     # 课程
     course = Course(name="测试课程", created_by="T001")

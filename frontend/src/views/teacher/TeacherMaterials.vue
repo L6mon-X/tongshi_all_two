@@ -41,7 +41,8 @@ function formatFileSize(bytes: number) {
 }
 
 async function loadCourses() {
-  courses.value = await getCourses()
+  const all = await getCourses()
+  courses.value = all.filter(course => course.is_owner)
 }
 
 async function loadMaterials() {
@@ -159,7 +160,14 @@ watch(filterCourse, () => {
     </div>
 
     <el-table :data="materials" stripe style="width: 100%" v-loading="loading">
-      <el-table-column prop="title" label="资料名称" min-width="220" />
+      <el-table-column prop="title" label="资料名称" min-width="220">
+        <template #default="{ row }">
+          <span>{{ row.title }}</span>
+          <el-tag v-if="row.is_synced" class="synced-tag" size="small" type="info" effect="plain">
+            公共同步
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="course_name" label="所属课程" min-width="180" />
       <el-table-column label="类型" width="100">
         <template #default="{ row }">
@@ -172,8 +180,8 @@ watch(filterCourse, () => {
       <el-table-column prop="date" label="上传时间" width="130" />
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" text size="small" @click="openMaterial(row)">查看</el-button>
-          <el-button type="danger" text size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button type="primary" size="small" @click="openMaterial(row)">查看</el-button>
+          <el-button v-if="!row.is_synced" type="danger" text size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -247,6 +255,10 @@ watch(filterCourse, () => {
 .empty-state {
   padding: var(--space-3xl) 0;
   text-align: center;
+}
+
+.synced-tag {
+  margin-left: var(--space-sm);
 }
 
 .form-group {

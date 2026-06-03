@@ -15,6 +15,8 @@ export interface Question {
   options: string[]
   answer: string
   explanation: string
+  source_question_id?: number | null
+  is_synced?: boolean
 }
 
 export function getQuestions(params?: { type?: string; course_id?: number }) {
