@@ -284,7 +284,7 @@ onMounted(fetchItems)
                   </div>
                   <div class="item-date">{{ formatDate(item.created_at) }}</div>
                   <div class="item-actions">
-                    <el-button size="small" type="primary" text @click="handleEdit(item)">
+                    <el-button size="small" type="primary" @click="handleEdit(item)">
                       编辑
                     </el-button>
                     <el-popconfirm
@@ -339,7 +339,7 @@ onMounted(fetchItems)
                   </div>
                   <div class="item-date">{{ formatDate(item.created_at) }}</div>
                   <div class="item-actions">
-                    <el-button size="small" type="primary" text @click="handleEdit(item)">
+                    <el-button size="small" type="primary" @click="handleEdit(item)">
                       编辑
                     </el-button>
                     <el-popconfirm

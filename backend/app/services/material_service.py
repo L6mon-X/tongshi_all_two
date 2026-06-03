@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import BusinessException
 from app.models.entities import Course, Material
 
 
@@ -55,6 +56,8 @@ def delete_material(db: Session, material_id: int, teacher_id: str | None = None
     m = query.first()
     if not m:
         return False
+    if m.source_material_id is not None:
+        raise BusinessException(400, "公共课程同步内容不能删除")
     db.delete(m)
     db.commit()
     return True

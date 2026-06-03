@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessException
-from app.models.entities import Announcement, AnnouncementClass, StudentClassEnrollment, TaskCompletion, User
+from app.models.entities import Announcement, AnnouncementClass, QuizAttempt, StudentClassEnrollment, TaskCompletion, User
 
 
 def _student_can_access(db: Session, user_id: str, announcement_id: int) -> bool:
@@ -80,11 +80,41 @@ def completion_report(db: Session, announcement_id: int, teacher_id: str):
     incomplete_students = []
     per_class = []
 
+    # 计算成绩：获取此任务的题目列表和每个学生的答题情况
+    question_ids = ann.question_ids if isinstance(ann.question_ids, list) else []
+    total_questions = len(question_ids)
+
+    # 预计算每个学生在此任务中的成绩
+    student_scores: dict[str, int] = {}
+    if question_ids:
+        # 获取所有学生在这些题目上的答题记录
+        attempts = (
+            db.query(QuizAttempt.user_id, QuizAttempt.question_id, QuizAttempt.is_correct)
+            .filter(QuizAttempt.question_id.in_(question_ids))
+            .all()
+        )
+        # 统计每个学生的正确题数
+        score_counts: dict[str, int] = {}
+        for user_id, question_id, is_correct in attempts:
+            if is_correct:
+                score_counts[user_id] = score_counts.get(user_id, 0) + 1
+        # 计算百分比成绩
+        for user_id, correct_count in score_counts.items():
+            student_scores[user_id] = round(correct_count / total_questions * 100) if total_questions > 0 else 0
+
     for class_id in class_ids:
         class_students = [(student, cid) for student, cid in students if cid == class_id]
         class_completed = 0
         for student, _ in class_students:
-            payload = {"id": student.id, "name": student.name, "class_id": class_id, "class_name": class_name_by_id.get(class_id, "")}
+            payload = {
+                "id": student.id, 
+                "name": student.name, 
+                "major": student.major,
+                "class_id": class_id, 
+                "class_name": class_name_by_id.get(class_id, ""),
+                "score": student_scores.get(student.id, 0),
+                "total_questions": total_questions,
+            }
             if student.id in completed_ids:
                 class_completed += 1
                 if student.id not in seen_student_ids:
@@ -99,6 +129,16 @@ def completion_report(db: Session, announcement_id: int, teacher_id: str):
             "completed": class_completed,
         })
 
+    # 处理时区比较问题
+    def _is_expired(end_time: datetime | None) -> bool:
+        if not end_time:
+            return False
+        now = datetime.now(timezone.utc)
+        if end_time.tzinfo is None:
+            end_time_utc = end_time.replace(tzinfo=timezone.utc)
+            return now > end_time_utc
+        return now > end_time
+
     return {
         "announcement_id": ann.id,
         "announcement_title": ann.title,
@@ -109,7 +149,10 @@ def completion_report(db: Session, announcement_id: int, teacher_id: str):
         "completed_count": len(completed_students),
         "incomplete_students": incomplete_students,
         "per_class": per_class,
-        "is_expired": bool(ann.end_time and datetime.now(timezone.utc) > ann.end_time),
+        "is_expired": _is_expired(ann.end_time),
+        "deadline": _iso(ann.end_time),
+        "created_at": _iso(ann.created_at),
+        "total_questions": total_questions,
     }
 
 
@@ -170,6 +213,16 @@ def task_overview(db: Session, teacher_id: str) -> dict:
     tasks = []
     now = datetime.now(timezone.utc)
 
+    def _is_expired(end_time: datetime | None) -> bool:
+        if not end_time:
+            return False
+        # 处理时区比较问题
+        if end_time.tzinfo is None:
+            # end_time 无时区信息，转换为 UTC 时间比较
+            end_time_utc = end_time.replace(tzinfo=timezone.utc)
+            return now > end_time_utc
+        return now > end_time
+
     for ann in anns:
         cids = ann_class_ids.get(ann.id, [])
         # 跨班级去重学生
@@ -186,7 +239,7 @@ def task_overview(db: Session, teacher_id: str) -> dict:
             "class_names": [class_names_map.get(cid, "") for cid in cids],
             "total_students": total,
             "completed_count": completed,
-            "is_expired": bool(ann.end_time and now > ann.end_time),
+            "is_expired": _is_expired(ann.end_time),
             "created_at": _iso(ann.created_at),
         })
 

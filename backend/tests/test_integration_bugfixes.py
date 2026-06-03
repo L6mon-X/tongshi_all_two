@@ -77,18 +77,265 @@ class TestTeacherRefactor:
         resp = client.delete(f"/api/questions/courses/{course_id}", headers=auth_header(teacher_token))
         assert resp.json()["code"] == 0
 
-    def test_create_public_course_keeps_public_flag(self, client, teacher_token):
+    def test_teacher_created_course_is_always_private(self, client, teacher_token):
         create_data = client.post(
             "/api/questions/courses",
-            json={"name": "公共课程测试", "is_public": True},
+            json={"name": "教师私有课程测试", "is_public": True},
             headers=auth_header(teacher_token),
         ).json()
         assert create_data["code"] == 0
 
         courses = client.get("/api/questions/courses", headers=auth_header(teacher_token)).json()["data"]
         created = next(item for item in courses if item["id"] == create_data["data"]["id"])
-        assert created["is_public"] is True
+        assert created["is_public"] is False
         assert created["is_owner"] is True
+
+    def test_teacher_edit_course_cannot_change_public_flag(self, client, db_session, teacher_token):
+        course = Course(name="已有公共课程", created_by="T001", is_public=True)
+        db_session.add(course)
+        db_session.commit()
+
+        resp = client.put(
+            f"/api/questions/courses/{course.id}",
+            json={"name": "已有公共课程改名", "is_public": False},
+            headers=auth_header(teacher_token),
+        )
+        assert resp.json()["code"] == 0
+
+        db_session.refresh(course)
+        assert course.name == "已有公共课程改名"
+        assert course.is_public is True
+
+    def test_add_public_course_creates_owned_copy_with_content(self, client, db_session, other_teacher_token):
+        public_course = Course(name="共享公共课程", created_by="T001", is_public=True)
+        db_session.add(public_course)
+        db_session.flush()
+        db_session.add(Material(course_id=public_course.id, type="pdf", title="共享资料", url="/uploads/shared.pdf", size="1 MB"))
+        db_session.add(Question(type="choice", course_id=public_course.id, stem="共享题目", options=["A", "B"], answer="A"))
+        db_session.commit()
+
+        resp = client.post(f"/api/questions/courses/{public_course.id}/add", headers=auth_header(other_teacher_token))
+        data = resp.json()
+
+        assert data["code"] == 0
+        added_id = data["data"]["id"]
+        added = db_session.query(Course).filter(Course.id == added_id).first()
+        assert added is not None
+        assert added.name == "共享公共课程"
+        assert added.created_by == "T002"
+        assert added.is_public is False
+        assert db_session.query(Material).filter(Material.course_id == added_id).count() == 1
+        assert db_session.query(Question).filter(Question.course_id == added_id).count() == 1
+
+        courses = client.get("/api/questions/courses", headers=auth_header(other_teacher_token)).json()["data"]
+        copied = next(item for item in courses if item["id"] == added_id)
+        assert copied["is_owner"] is True
+        assert copied["is_public"] is False
+        assert copied["material_count"] == 1
+        assert copied["question_count"] == 1
+
+    def test_add_public_course_records_source_ids(self, client, db_session, other_teacher_token):
+        public_course = Course(name="公共来源课程", created_by="T001", is_public=True)
+        db_session.add(public_course)
+        db_session.flush()
+        public_material = Material(
+            course_id=public_course.id,
+            type="pdf",
+            title="公共资料",
+            url="/uploads/public.pdf",
+            size="1 MB",
+        )
+        public_question = Question(
+            type="choice",
+            course_id=public_course.id,
+            stem="公共题目",
+            options=["A", "B"],
+            answer="A",
+        )
+        db_session.add_all([public_material, public_question])
+        db_session.commit()
+
+        resp = client.post(
+            f"/api/questions/courses/{public_course.id}/add",
+            headers=auth_header(other_teacher_token),
+        )
+        assert resp.json()["code"] == 0
+        copy_id = resp.json()["data"]["id"]
+
+        copied_course = db_session.query(Course).filter(Course.id == copy_id).first()
+        assert copied_course.source_course_id == public_course.id
+
+        copied_material = db_session.query(Material).filter(Material.course_id == copy_id).one()
+        assert copied_material.source_material_id == public_material.id
+
+        copied_question = db_session.query(Question).filter(Question.course_id == copy_id).one()
+        assert copied_question.source_question_id == public_question.id
+
+    def test_admin_create_public_course_and_sync_material_to_teacher_copy(
+        self,
+        client,
+        db_session,
+        teacher_token,
+        other_teacher_token,
+    ):
+        admin_token = client.post(
+            "/api/token", json={"id": "admin", "password": "admin123"}).json()["data"]["access_token"]
+
+        create_resp = client.post(
+            "/api/admin/public-courses",
+            json={"name": "管理员公共课程"},
+            headers=auth_header(admin_token),
+        )
+        assert create_resp.json()["code"] == 0
+        public_course_id = create_resp.json()["data"]["id"]
+
+        client.post(f"/api/questions/courses/{public_course_id}/add", headers=auth_header(teacher_token))
+        client.post(f"/api/questions/courses/{public_course_id}/add", headers=auth_header(other_teacher_token))
+
+        material_resp = client.post(
+            f"/api/admin/public-courses/{public_course_id}/materials",
+            json={"type": "pdf", "title": "同步资料", "url": "/uploads/sync.pdf", "size": "1 MB"},
+            headers=auth_header(admin_token),
+        )
+        assert material_resp.json()["code"] == 0
+        source_material_id = material_resp.json()["data"]["id"]
+
+        copies = db_session.query(Course).filter(Course.source_course_id == public_course_id).all()
+        assert len(copies) == 2
+        for copy in copies:
+            mirrored = db_session.query(Material).filter(
+                Material.course_id == copy.id,
+                Material.source_material_id == source_material_id,
+            ).first()
+            assert mirrored is not None
+            assert mirrored.title == "同步资料"
+
+    def test_admin_question_changes_sync_and_teacher_cannot_modify_synced_content(
+        self,
+        client,
+        db_session,
+        teacher_token,
+    ):
+        admin_token = client.post(
+            "/api/token", json={"id": "admin", "password": "admin123"}).json()["data"]["access_token"]
+        course_resp = client.post(
+            "/api/admin/public-courses",
+            json={"name": "公共题库课程"},
+            headers=auth_header(admin_token),
+        )
+        public_course_id = course_resp.json()["data"]["id"]
+        add_resp = client.post(f"/api/questions/courses/{public_course_id}/add", headers=auth_header(teacher_token))
+        copy_id = add_resp.json()["data"]["id"]
+
+        question_resp = client.post(
+            f"/api/admin/public-courses/{public_course_id}/questions",
+            json={"type": "choice", "stem": "原题干", "options": ["A", "B"], "answer": "A", "explanation": "原解析"},
+            headers=auth_header(admin_token),
+        )
+        source_question_id = question_resp.json()["data"]["id"]
+        mirrored = db_session.query(Question).filter(
+            Question.course_id == copy_id,
+            Question.source_question_id == source_question_id,
+        ).one()
+        assert mirrored.stem == "原题干"
+
+        list_resp = client.get(f"/api/questions?course_id={copy_id}", headers=auth_header(teacher_token))
+        listed = next(item for item in list_resp.json()["data"] if item["id"] == mirrored.id)
+        assert listed["source_question_id"] == source_question_id
+        assert listed["is_synced"] is True
+
+        update_resp = client.put(
+            f"/api/admin/public-courses/{public_course_id}/questions/{source_question_id}",
+            json={"type": "choice", "stem": "新题干", "options": ["A", "B"], "answer": "B", "explanation": "新解析"},
+            headers=auth_header(admin_token),
+        )
+        assert update_resp.json()["code"] == 0
+        db_session.refresh(mirrored)
+        assert mirrored.stem == "新题干"
+        assert mirrored.answer == "B"
+
+        teacher_edit = client.put(
+            f"/api/questions/{mirrored.id}",
+            json={"course_id": copy_id, "type": "choice", "stem": "教师改", "options": ["A"], "answer": "A", "explanation": ""},
+            headers=auth_header(teacher_token),
+        )
+        assert teacher_edit.json()["code"] == 400
+        assert "公共课程同步内容" in teacher_edit.json()["message"]
+
+        teacher_delete = client.delete(f"/api/questions/{mirrored.id}", headers=auth_header(teacher_token))
+        assert teacher_delete.json()["code"] == 400
+        assert "公共课程同步内容" in teacher_delete.json()["message"]
+
+    def test_teacher_cannot_delete_synced_material(self, client, db_session, teacher_token):
+        admin_token = client.post(
+            "/api/token", json={"id": "admin", "password": "admin123"}).json()["data"]["access_token"]
+        course_resp = client.post(
+            "/api/admin/public-courses",
+            json={"name": "公共资料课程"},
+            headers=auth_header(admin_token),
+        )
+        public_course_id = course_resp.json()["data"]["id"]
+        copy_resp = client.post(f"/api/questions/courses/{public_course_id}/add", headers=auth_header(teacher_token))
+        copy_id = copy_resp.json()["data"]["id"]
+        material_resp = client.post(
+            f"/api/admin/public-courses/{public_course_id}/materials",
+            json={"type": "pdf", "title": "只读资料", "url": "/uploads/readonly.pdf", "size": "1 MB"},
+            headers=auth_header(admin_token),
+        )
+        source_material_id = material_resp.json()["data"]["id"]
+        mirrored = db_session.query(Material).filter(
+            Material.course_id == copy_id,
+            Material.source_material_id == source_material_id,
+        ).one()
+
+        list_resp = client.get(f"/api/materials?course_id={copy_id}", headers=auth_header(teacher_token))
+        listed = next(item for item in list_resp.json()["data"] if item["id"] == mirrored.id)
+        assert listed["source_material_id"] == source_material_id
+        assert listed["is_synced"] is True
+
+        delete_resp = client.delete(f"/api/materials/{mirrored.id}", headers=auth_header(teacher_token))
+        assert delete_resp.json()["code"] == 400
+        assert "公共课程同步内容" in delete_resp.json()["message"]
+
+    def test_delete_public_course_unlinks_teacher_copy_content(self, client, db_session, teacher_token):
+        admin_token = client.post(
+            "/api/token", json={"id": "admin", "password": "admin123"}).json()["data"]["access_token"]
+        course_resp = client.post(
+            "/api/admin/public-courses",
+            json={"name": "可删除公共课程"},
+            headers=auth_header(admin_token),
+        )
+        public_course_id = course_resp.json()["data"]["id"]
+        material_resp = client.post(
+            f"/api/admin/public-courses/{public_course_id}/materials",
+            json={"type": "pdf", "title": "公共资料", "url": "/uploads/delete-source.pdf", "size": "1 MB"},
+            headers=auth_header(admin_token),
+        )
+        question_resp = client.post(
+            f"/api/admin/public-courses/{public_course_id}/questions",
+            json={"type": "choice", "stem": "公共题目", "options": ["A", "B"], "answer": "A", "explanation": ""},
+            headers=auth_header(admin_token),
+        )
+        copy_resp = client.post(f"/api/questions/courses/{public_course_id}/add", headers=auth_header(teacher_token))
+        copy_id = copy_resp.json()["data"]["id"]
+
+        delete_resp = client.delete(
+            f"/api/admin/public-courses/{public_course_id}",
+            headers=auth_header(admin_token),
+        )
+        assert delete_resp.json()["code"] == 0
+
+        copied_course = db_session.query(Course).filter(Course.id == copy_id).one()
+        assert copied_course.source_course_id is None
+
+        copied_material = db_session.query(Material).filter(Material.course_id == copy_id).one()
+        assert copied_material.source_material_id is None
+
+        copied_question = db_session.query(Question).filter(Question.course_id == copy_id).one()
+        assert copied_question.source_question_id is None
+
+        assert db_session.query(Material).filter(Material.id == material_resp.json()["data"]["id"]).first() is None
+        assert db_session.query(Question).filter(Question.id == question_resp.json()["data"]["id"]).first() is None
 
     def test_student_without_class_gets_empty_course_hint(self, client, db_session):
         student = User(
@@ -249,7 +496,9 @@ class TestTeacherRefactor:
         assert created["url"].startswith("/api/files/")
 
     def test_get_file_by_file_id_returns_streamed_content(self, client, db_session, teacher_token):
-        upload_dir = Path(__file__).resolve().parents[1] / "uploads"
+        from app.services.file_service import _local_adapter
+
+        upload_dir = _local_adapter.root_dir
         upload_dir.mkdir(parents=True, exist_ok=True)
         test_file = upload_dir / "file-by-id-test.pdf"
         test_file.write_bytes(b"%PDF-1.4 test content")
@@ -323,7 +572,9 @@ class TestTeacherRefactor:
         assert resp.content == mp4_content[:16]
 
     def test_batch_download_only_uses_teacher_students(self, client, db_session, teacher_token, other_teacher_token):
-        upload_dir = Path(__file__).resolve().parents[1] / "uploads"
+        from app.services.file_service import _local_adapter
+
+        upload_dir = _local_adapter.root_dir
         upload_dir.mkdir(parents=True, exist_ok=True)
         own_report = upload_dir / "own-report.pdf"
         other_report = upload_dir / "other-report.pdf"
@@ -556,7 +807,9 @@ class TestBatchDownload:
 
     def test_local_storage_batch_download(self, client, db_session, student_token, teacher_token):
         """本地存储模式下批量下载返回 ZIP。"""
-        upload_dir = Path(__file__).resolve().parents[1] / "uploads"
+        from app.services.file_service import _local_adapter
+
+        upload_dir = _local_adapter.root_dir
         upload_dir.mkdir(parents=True, exist_ok=True)
         report_path = upload_dir / "batch-dl-test.pdf"
         report_path.write_bytes(b"%PDF-1.4 batch download test content")
@@ -588,7 +841,9 @@ class TestBatchDownload:
 
     def test_batch_download_with_report_file_id(self, client, db_session, student_token, teacher_token):
         """通过 report_file_id（新方式）批量下载。"""
-        upload_dir = Path(__file__).resolve().parents[1] / "uploads"
+        from app.services.file_service import _local_adapter
+
+        upload_dir = _local_adapter.root_dir
         upload_dir.mkdir(parents=True, exist_ok=True)
         local_file = upload_dir / "file-id-dl-test.pdf"
         local_file.write_bytes(b"%PDF-1.4 via stored_file")

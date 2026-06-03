@@ -17,7 +17,7 @@ const dialogVisible = ref(false)
 const questionDialogVisible = ref(false)
 const questionLoading = ref(false)
 const questionKeyword = ref('')
-const questionTypeFilter = ref<'' | 'choice' | 'fill'>('')
+const questionTypeFilter = ref<'' | 'choice' | 'fill' | 'multi_choice'>('')
 const questionAddCount = ref<number | null>(null)
 const draftSelectedQuestionIds = ref<number[]>([])
 const checkedQuestionIds = ref<number[]>([])
@@ -62,7 +62,7 @@ const selectedQuestions = computed(() => {
 })
 
 function getQuestionTypeLabel(type: Question['type']) {
-  return type === 'choice' ? '选择题' : '填空题'
+  return type === 'choice' ? '选择题' : type === 'multi_choice' ? '多选题' : '填空题'
 }
 
 function getQuestionPreview(stem: string, length = 52) {
@@ -359,6 +359,7 @@ onMounted(async () => {
             />
             <el-select v-model="questionTypeFilter" placeholder="全部题型" clearable size="large" style="width: 140px">
               <el-option label="选择题" value="choice" />
+              <el-option label="多选题" value="multi_choice" />
               <el-option label="填空题" value="fill" />
             </el-select>
             <el-button size="large" @click="resetQuestionFilters">重置</el-button>
@@ -394,7 +395,7 @@ onMounted(async () => {
             </el-table-column>
             <el-table-column label="题型" width="100">
               <template #default="{ row }">
-                <el-tag :type="row.type === 'choice' ? '' : 'success'" size="small" effect="plain">
+                <el-tag :type="row.type === 'choice' ? '' : row.type === 'multi_choice' ? 'warning' : 'success'" size="small" effect="plain">
                   {{ getQuestionTypeLabel(row.type) }}
                 </el-tag>
               </template>

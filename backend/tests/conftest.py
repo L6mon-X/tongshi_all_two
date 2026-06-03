@@ -1,12 +1,26 @@
 """测试配置：SQLite 内存数据库 + FastAPI TestClient"""
+import shutil
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
-def force_local_storage_for_tests(monkeypatch):
+def force_local_storage_for_tests(monkeypatch, request):
     """测试环境强制 local 存储，避免依赖外部 SeaweedFS/S3 服务。"""
+    safe_name = request.node.nodeid.replace("\\", "_").replace("/", "_").replace(":", "_")
+    upload_dir = Path(__file__).resolve().parents[1] / ".test-uploads" / safe_name
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
     monkeypatch.setattr("app.core.config.settings.storage_backend", "local")
+    monkeypatch.setattr("app.core.config.settings.local_upload_dir", str(upload_dir))
+    from app.services.storage_local import LocalStorageAdapter
+    import app.services.file_service as file_service
+
+    monkeypatch.setattr(file_service, "_local_adapter", LocalStorageAdapter(upload_dir))
+    yield
+    shutil.rmtree(upload_dir, ignore_errors=True)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -43,7 +57,8 @@ def _seed_test_data(session):
     other_student = User(id="2025002", name="其它学生", hashed_password=get_password_hash("abc123"), role="student", major="人工智能")
     teacher = User(id="T001", name="测试教师", hashed_password=get_password_hash("abc123"), role="teacher", major="")
     other_teacher = User(id="T002", name="其它教师", hashed_password=get_password_hash("abc123"), role="teacher", major="")
-    session.add_all([student, other_student, teacher, other_teacher])
+    admin = User(id="admin", name="管理员", hashed_password=get_password_hash("admin123"), role="admin", major="")
+    session.add_all([student, other_student, teacher, other_teacher, admin])
 
     # 课程
     course = Course(name="测试课程", created_by="T001")

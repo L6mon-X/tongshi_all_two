@@ -283,8 +283,8 @@ def batch_download_projects(
 
 def _write_student_sheet(ws, students: list) -> None:
     """向工作表写入学生成绩：表头行、数据行、末尾汇总行"""
-    # 表头行
-    headers = ["序号", "学号", "姓名", "专业", "班级", "学习进度(%)", "练习题数", "正确率(%)"]
+    # 表头行（与前端表格列保持一致）
+    headers = ["序号", "学号", "姓名", "专业", "班级", "已完成", "未完成", "完成率(%)"]
     ws.append(headers)
 
     # 数据行，每个学生一行
@@ -295,19 +295,19 @@ def _write_student_sheet(ws, students: list) -> None:
             s["name"],
             s["major"] or "",
             s["class_name"] or "未分班",
-            s["progress"],
-            s["exercises"],
-            s["accuracy"],
+            s["completed_tasks"],
+            s["incomplete_tasks"],
+            s["task_completion_rate"],
         ])
 
     # 汇总行（仅当有数据时追加）
     if students:
         count = len(students)
-        avg_progress = round(sum(s["progress"] for s in students) / count, 1)
-        avg_exercises = round(sum(s["exercises"] for s in students) / count, 1)
-        avg_accuracy = round(sum(s["accuracy"] for s in students) / count, 1)
-        ws.append(["平均", "—", "—", "—", "—", avg_progress,
-                  avg_exercises, avg_accuracy])
+        avg_completed = round(sum(s["completed_tasks"] for s in students) / count, 1)
+        avg_incomplete = round(sum(s["incomplete_tasks"] for s in students) / count, 1)
+        avg_rate = round(sum(s["task_completion_rate"] for s in students) / count, 1)
+        ws.append(["平均", "—", "—", "—", "—", avg_completed,
+                  avg_incomplete, avg_rate])
 
 
 @router.get("/students/export", summary="导出学生成绩", description="教师端：将学生成绩导出为 Excel 文件，支持按班级筛选")
@@ -358,17 +358,17 @@ def export_students_excel(
             ws_cls = wb.create_sheet(title=cn[:31])
             _write_student_sheet(ws_cls, group)
             count = len(group)
-            avg_p = round(sum(s["progress"]
+            avg_c = round(sum(s["completed_tasks"]
                           for s in group) / count, 1) if count else 0.0
-            avg_e = round(sum(s["exercises"]
+            avg_i = round(sum(s["incomplete_tasks"]
                           for s in group) / count, 1) if count else 0.0
-            avg_a = round(sum(s["accuracy"]
+            avg_r = round(sum(s["task_completion_rate"]
                           for s in group) / count, 1) if count else 0.0
-            summary_rows.append([cn, count, avg_p, avg_e, avg_a])
+            summary_rows.append([cn, count, avg_c, avg_i, avg_r])
 
         # 最后一个 Sheet：数据摘要（各班级汇总）
         ws_summary = wb.create_sheet(title="数据摘要")
-        ws_summary.append(["班级名称", "学生人数", "平均学习进度(%)", "平均练习题数", "平均正确率(%)"])
+        ws_summary.append(["班级名称", "学生人数", "平均已完成", "平均未完成", "平均完成率(%)"])
         for row in summary_rows:
             ws_summary.append(row)
 

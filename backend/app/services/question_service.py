@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessException
 from app.models.entities import Class, Course, Material, Question, StudentProgress
+from app.services.public_course_sync_service import mirror_public_course_content
 
 
 def list_questions(
@@ -53,6 +54,8 @@ def update_question(db: Session, question_id: int, data: dict, teacher_id: str):
     q = get_question(db, question_id, teacher_id)
     if not q:
         return None
+    if q.source_question_id is not None:
+        raise BusinessException(400, "公共课程同步内容不能修改")
     if "course_id" in data and data["course_id"] is not None:
         if not _get_owned_course(db, data["course_id"], teacher_id):
             raise BusinessException(404, "课程不存在")
@@ -67,9 +70,19 @@ def delete_question(db: Session, question_id: int, teacher_id: str):
     q = get_question(db, question_id, teacher_id)
     if not q:
         return False
+    if q.source_question_id is not None:
+        raise BusinessException(400, "公共课程同步内容不能删除")
     # 先删除关联的答题记录
-    from app.models.entities import QuizAttempt
+    from app.models.entities import QuizAttempt, Announcement
+    from sqlalchemy import func as sa_func
     db.query(QuizAttempt).filter(QuizAttempt.question_id == question_id).delete()
+    # 清理公告中对被删题目的引用（从 question_ids JSON 数组中移除该 ID）
+    anns = db.query(Announcement).filter(
+        sa_func.json_contains(Announcement.question_ids, str(question_id))
+    ).all()
+    for ann in anns:
+        if ann.question_ids:
+            ann.question_ids = [qid for qid in ann.question_ids if qid != question_id]
     # 再删除题目
     db.delete(q)
     db.commit()
@@ -93,6 +106,30 @@ def create_course(db: Session, name: str, teacher_id: str, is_public: bool = Fal
         raise BusinessException(400, "课程已存在")
     course = Course(name=name, created_by=teacher_id, is_public=is_public)
     db.add(course)
+    db.commit()
+    db.refresh(course)
+    return course
+
+
+def add_public_course(db: Session, course_id: int, teacher_id: str):
+    source = db.query(Course).filter(
+        Course.id == course_id,
+        Course.is_public.is_(True),
+    ).first()
+    if not source:
+        raise BusinessException(404, "公共课程不存在")
+
+    existing = db.query(Course).filter(Course.name == source.name, Course.created_by == teacher_id).first()
+    if existing:
+        return existing
+
+    course = Course(name=source.name, created_by=teacher_id,
+                    is_public=False, source_course_id=source.id)
+    db.add(course)
+    db.flush()
+
+    mirror_public_course_content(db, source, course)
+
     db.commit()
     db.refresh(course)
     return course
@@ -171,9 +208,9 @@ def import_questions_from_excel(db: Session, rows: list[dict], teacher_id: str):
             option_list = [x.strip() for x in options.split("|") if x.strip()] if options else []
             answer = str(row.get("答案", row.get("answer", ""))).strip()
             explanation = str(row.get("解析", row.get("explanation", ""))).strip()
-            if q_type not in {"choice", "fill"}:
-                raise BusinessException(400, "题型必须为 choice 或 fill")
-            if q_type == "choice" and not option_list:
+            if q_type not in {"choice", "fill", "multi_choice"}:
+                raise BusinessException(400, "题型必须为 choice、fill 或 multi_choice")
+            if q_type in {"choice", "multi_choice"} and not option_list:
                 raise BusinessException(400, "选择题必须填写选项")
             q = Question(type=q_type, course_id=course.id, stem=stem,
                          options=option_list, answer=answer, explanation=explanation)

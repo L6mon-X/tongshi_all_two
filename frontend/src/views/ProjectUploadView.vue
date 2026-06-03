@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { createProject, getProject, updateProject, type Project } from '@/api/project'
+import { createProject, getProject, updateProject, type Project, type ProjectPayload } from '@/api/project'
 import { uploadFile } from '@/api/upload'
 
 const router = useRouter()
@@ -148,7 +148,7 @@ async function handleSubmit() {
       uploadedImageFileIds.push(result.file_id)
     }
 
-    const payload: Record<string, any> = {
+    const payload: ProjectPayload = {
       title: form.title.trim(),
       description: form.description.trim(),
       tags: tags.value,

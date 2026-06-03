@@ -22,6 +22,7 @@ watch(courseId, async () => {
 
 const currentIndex = ref(0)
 const selectedOption = ref<string | null>(null)
+const selectedOptions = ref<string[]>([])
 const fillAnswer = ref('')
 const submitted = ref(false)
 const answers = ref<(string | null)[]>([])
@@ -45,6 +46,9 @@ async function submitAnswer() {
   if (q.type === 'choice') {
     if (!selectedOption.value) return
     userAnswer = selectedOption.value
+  } else if (q.type === 'multi_choice') {
+    if (selectedOptions.value.length === 0) return
+    userAnswer = [...selectedOptions.value].sort().join('')
   } else {
     if (!fillAnswer.value.trim()) return
     userAnswer = fillAnswer.value.trim()
@@ -78,17 +82,39 @@ function resetState() {
   const idx = currentIndex.value
   if (results.value[idx] !== null) {
     submitted.value = true
-    selectedOption.value = currentQuestion.value.type === 'choice' ? (answers.value[idx] ?? null) : null
-    fillAnswer.value = currentQuestion.value.type === 'fill' ? (answers.value[idx] ?? '') : ''
+    if (currentQuestion.value.type === 'choice') {
+      selectedOption.value = answers.value[idx] ?? null
+      selectedOptions.value = []
+      fillAnswer.value = ''
+    } else if (currentQuestion.value.type === 'multi_choice') {
+      selectedOption.value = null
+      selectedOptions.value = answers.value[idx] ? answers.value[idx]!.split('') : []
+      fillAnswer.value = ''
+    } else {
+      selectedOption.value = null
+      selectedOptions.value = []
+      fillAnswer.value = answers.value[idx] ?? ''
+    }
   } else {
     submitted.value = false
     selectedOption.value = null
+    selectedOptions.value = []
     fillAnswer.value = ''
   }
 }
 
 function selectOption(label: string | undefined) {
   if (!submitted.value && label) selectedOption.value = label
+}
+
+function toggleOption(label: string | undefined) {
+  if (submitted.value || !label) return
+  const idx = selectedOptions.value.indexOf(label)
+  if (idx >= 0) {
+    selectedOptions.value.splice(idx, 1)
+  } else {
+    selectedOptions.value.push(label)
+  }
 }
 
 const correctCount = computed(() => results.value.filter(r => r === true).length)
@@ -162,6 +188,30 @@ const correctCount = computed(() => results.value.filter(r => r === true).length
               <span class="option-label">{{ optionLabels[i] }}</span>
               <span class="option-text">{{ opt }}</span>
             </div>
+          </div>
+
+          <!-- Multi-choice question -->
+          <div v-else-if="currentQuestion.type === 'multi_choice'" class="options-list">
+            <div
+              v-for="(opt, i) in currentQuestion.options"
+              :key="i"
+              class="option-item multi"
+              :class="{
+                selected: selectedOptions.includes(optionLabels[i]),
+                correct: submitted && currentQuestion.answer.includes(optionLabels[i]),
+                wrong: submitted && selectedOptions.includes(optionLabels[i]) && !currentQuestion.answer.includes(optionLabels[i]),
+              }"
+              @click="toggleOption(optionLabels[i])"
+            >
+              <span class="option-checkbox" :class="{ checked: selectedOptions.includes(optionLabels[i]) }">
+                <svg v-if="selectedOptions.includes(optionLabels[i])" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span class="option-label">{{ optionLabels[i] }}</span>
+              <span class="option-text">{{ opt }}</span>
+            </div>
+            <div v-if="!submitted" class="multi-hint">可选择多个选项，选好后点击"提交答案"</div>
           </div>
 
           <!-- Fill question -->
@@ -470,6 +520,44 @@ const correctCount = computed(() => results.value.filter(r => r === true).length
 .option-text {
   font-size: 0.95rem;
   color: var(--color-text);
+}
+
+/* Multi-choice checkbox */
+.option-checkbox {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all var(--duration-fast);
+}
+
+.option-checkbox.checked {
+  border-color: var(--color-practice);
+  background: var(--color-practice);
+  color: white;
+}
+
+.option-item.correct .option-checkbox {
+  border-color: #10b981;
+  background: #10b981;
+  color: white;
+}
+
+.option-item.wrong .option-checkbox {
+  border-color: #ef4444;
+  background: #ef4444;
+  color: white;
+}
+
+.multi-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: var(--space-sm);
+  text-align: center;
 }
 
 /* Fill */

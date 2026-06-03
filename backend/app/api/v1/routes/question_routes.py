@@ -14,14 +14,16 @@ from app.db.session import get_db
 from app.core.security import get_current_user, require_role
 from app.core.response import success
 from app.core.exceptions import BusinessException
+from app.core.timezone_utils import to_beijing_iso
 from app.core.upload_validation import validate_upload, ALLOWED_EXCEL_EXTENSIONS, MAX_EXCEL_SIZE
 from app.schemas.common import AuthUser, QuestionCreate, QuestionUpdate, CourseCreateRequest, CourseUpdateRequest
-from app.services.course_response_service import build_course_detail, build_course_list
+from app.models.entities import Class, Course, StudentClassEnrollment
 from app.services.question_service import (
     list_questions, create_question, update_question, delete_question,
-    get_course_questions, create_course, update_course, delete_course,
-    get_course_detail, import_questions_from_excel,
+    get_course_questions, create_course, add_public_course, update_course, delete_course,
+    get_course_detail, import_questions_from_excel, list_courses,
 )
+from app.services.course_response_service import build_course_detail, build_course_list
 
 router = APIRouter(prefix="/questions", tags=["questions"])
 
@@ -36,6 +38,8 @@ def _format_question(q):
         "options": q.options or [],
         "answer": q.answer,
         "explanation": q.explanation or "",
+        "source_question_id": q.source_question_id,
+        "is_synced": bool(q.source_question_id),
     }
 
 
@@ -85,10 +89,75 @@ def get_courses(db: Session = Depends(get_db), current_user: AuthUser = Depends(
         return success(data["courses"])
     return success(data)
 
+    if current_user.role == "teacher":
+        courses = list_courses(db, current_user.id)
+        return success([{
+            "id": c.id,
+            "name": c.name,
+            "created_at": to_beijing_iso(c.created_at),
+            "material_count": len(c.materials),
+            "question_count": len(c.questions),
+            "class_count": len(c.classes),
+        } for c in courses])
+    elif current_user.role == "student":
+        # 查询学生所属班级
+        enrollments = (
+            db.query(StudentClassEnrollment)
+            .filter(StudentClassEnrollment.user_id == current_user.id)
+            .all()
+        )
+        if not enrollments:
+            # 学生未加入任何班级
+            return success({"courses": [], "hint": "你尚未加入任何班级，请联系老师"})
+        # 检查班级是否已分配课程
+        class_ids = [e.class_id for e in enrollments]
+        classes_with_course = (
+            db.query(Class)
+            .filter(Class.id.in_(class_ids), Class.course_id.isnot(None))
+            .all()
+        )
+        if not classes_with_course:
+            # 学生有班级但班级未分配课程
+            return success({"courses": [], "hint": "你的班级尚未分配课程，请联系老师"})
+        course_ids = list({c.course_id for c in classes_with_course})
+        courses = (
+            db.query(Course)
+            .filter(Course.id.in_(course_ids))
+            .order_by(Course.id.desc())
+            .all()
+        )
+        return success({
+            "courses": [{
+                "id": c.id,
+                "name": c.name,
+                "created_at": to_beijing_iso(c.created_at),
+                "material_count": len(c.materials),
+                "question_count": len(c.questions),
+                "class_count": len(c.classes),
+            } for c in courses],
+            "hint": None,
+        })
+    else:
+        courses = list_courses(db)
+        return success([{
+            "id": c.id,
+            "name": c.name,
+            "created_at": to_beijing_iso(c.created_at),
+            "material_count": len(c.materials),
+            "question_count": len(c.questions),
+            "class_count": len(c.classes),
+        } for c in courses])
+
 
 @router.post("/courses", summary="创建课程", description="教师端：创建新课程")
 def add_course(data: CourseCreateRequest, db: Session = Depends(get_db), current_user: AuthUser = Depends(require_role("teacher"))):
-    course = create_course(db, data.name.strip(), current_user.id, data.is_public)
+    course = create_course(db, data.name.strip(), current_user.id, False)
+    return success({"id": course.id})
+
+
+@router.post("/courses/{course_id}/add", summary="添加公共课程", description="教师端：将公共课程添加为自己的课程")
+def add_public_course_to_teacher(course_id: int, db: Session = Depends(get_db), current_user: AuthUser = Depends(require_role("teacher"))):
+    course = add_public_course(db, course_id, current_user.id)
     return success({"id": course.id})
 
 
@@ -103,11 +172,20 @@ def get_course(
     if not detail:
         raise BusinessException(404, "课程不存在")
     return success(build_course_detail(db, detail, current_user))
+    course, material_count, question_count, class_count = detail
+    return success({
+        "id": course.id,
+        "name": course.name,
+        "created_at": to_beijing_iso(course.created_at),
+        "material_count": material_count,
+        "question_count": question_count,
+        "class_count": class_count,
+    })
 
 
 @router.put("/courses/{course_id}", summary="修改课程名称", description="教师端：修改指定课程的名称")
 def edit_course(course_id: int, data: CourseUpdateRequest, db: Session = Depends(get_db), current_user: AuthUser = Depends(require_role("teacher"))):
-    course = update_course(db, course_id, data.name.strip(), current_user.id, data.is_public)
+    course = update_course(db, course_id, data.name.strip(), current_user.id)
     if not course:
         raise BusinessException(404, "课程不存在")
     return success()
@@ -129,9 +207,12 @@ def _build_question_template(question_type: str) -> bytes:
         ws.append(["choice", "示例课程", "图灵测试由谁提出？", "A. 图灵|B. 冯·诺依曼|C. 乔布斯|D. 爱因斯坦", "A", "图灵提出了图灵测试。"])
     elif question_type == "fill":
         ws.append(["fill", "示例课程", "中国的首都是哪里？", "", "北京", "填空题直接填写答案关键词。"])
+    elif question_type == "multi_choice":
+        ws.append(["multi_choice", "示例课程", "以下哪些是编程语言？", "A. Python|B. Java|C. HTML|D. C++", "ABD", "HTML 是标记语言，不是编程语言。"])
     else:
         ws.append(["choice", "示例课程", "图灵测试由谁提出？", "A. 图灵|B. 冯·诺依曼|C. 乔布斯|D. 爱因斯坦", "A", "图灵提出了图灵测试。"])
         ws.append(["fill", "示例课程", "中国的首都是哪里？", "", "北京", "填空题直接填写答案关键词。"])
+        ws.append(["multi_choice", "示例课程", "以下哪些是编程语言？", "A. Python|B. Java|C. HTML|D. C++", "ABD", "HTML 是标记语言，不是编程语言。"])
     buffer = BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
@@ -152,7 +233,7 @@ def _download_template_response(template_type: str):
 
 
 @router.get("/import/template", summary="下载题目导入模板", description="教师端：下载 Excel 批量导入模板（中文表头，支持选择题和填空题）")
-def download_question_template(template_type: str = Query("all", pattern="^(all|choice|fill)$"), current_user: AuthUser = Depends(require_role("teacher"))):
+def download_question_template(template_type: str = Query("all", pattern="^(all|choice|fill|multi_choice)$"), current_user: AuthUser = Depends(require_role("teacher"))):
     return _download_template_response(template_type)
 
 
@@ -164,6 +245,11 @@ def download_choice_question_template(current_user: AuthUser = Depends(require_r
 @router.get("/import/template/fill", summary="下载填空题导入模板", description="教师端：下载填空题 Excel 模板")
 def download_fill_question_template(current_user: AuthUser = Depends(require_role("teacher"))):
     return _download_template_response("fill")
+
+
+@router.get("/import/template/multi_choice", summary="下载多选题导入模板", description="教师端：下载多选题 Excel 模板")
+def download_multi_choice_question_template(current_user: AuthUser = Depends(require_role("teacher"))):
+    return _download_template_response("multi_choice")
 
 
 @router.post("/import", summary="Excel 批量导入题目", description="教师端：上传 Excel 批量导入题目（.xlsx，表头：题型/课程名称/题干/选项/答案/解析）")

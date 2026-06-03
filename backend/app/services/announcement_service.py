@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessException
+from app.core.timezone_utils import to_beijing_iso
 from app.models.entities import (
     Announcement,
     AnnouncementClass,
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def _iso(dt: datetime | None) -> str:
-    return dt.isoformat() if dt else ""
+    return to_beijing_iso(dt)
 
 
 def _class_payloads(ann: Announcement) -> list[dict]:

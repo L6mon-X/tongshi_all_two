@@ -20,6 +20,8 @@ def _format_material(m):
         "duration": m.duration, "pages": m.pages,
         "size": m.size, "date": m.date,
         "file_id": m.file_id,
+        "source_material_id": m.source_material_id,
+        "is_synced": bool(m.source_material_id),
     }
 
 

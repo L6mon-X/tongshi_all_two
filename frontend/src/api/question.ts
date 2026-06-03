@@ -8,13 +8,15 @@ export interface Course {
 
 export interface Question {
   id: number
-  type: 'choice' | 'fill'
+  type: 'choice' | 'fill' | 'multi_choice'
   course_id: number
   course_name: string
   stem: string
   options: string[]
   answer: string
   explanation: string
+  source_question_id?: number | null
+  is_synced?: boolean
 }
 
 export function getQuestions(params?: { type?: string; course_id?: number }) {
@@ -45,13 +47,15 @@ export function importQuestions(file: File) {
   })
 }
 
-export async function downloadQuestionTemplate(type: 'all' | 'choice' | 'fill' = 'all') {
+export async function downloadQuestionTemplate(type: 'all' | 'choice' | 'fill' | 'multi_choice' = 'all') {
   const token = localStorage.getItem('auth_token')
   const url = type === 'choice'
     ? '/api/questions/import/template/choice'
     : type === 'fill'
       ? '/api/questions/import/template/fill'
-      : '/api/questions/import/template'
+      : type === 'multi_choice'
+        ? '/api/questions/import/template/multi_choice'
+        : '/api/questions/import/template'
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })

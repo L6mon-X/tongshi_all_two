@@ -10,4 +10,5 @@ python-dotenv
 openpyxl
 alembic
 boto3
+moto
 python-magic

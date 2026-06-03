@@ -5,10 +5,11 @@ import { createQuestion, deleteQuestion, downloadQuestionTemplate, getQuestions,
 import { getCourses, type Course } from '@/api/course'
 
 const courses = ref<Course[]>([])
+const writableCourses = ref<Course[]>([])
 const questions = ref<Question[]>([])
 const loading = ref(true)
 const filterCourse = ref<number | ''>('')
-const filterType = ref<'' | 'choice' | 'fill'>('')
+const filterType = ref<'' | 'choice' | 'fill' | 'multi_choice'>('')
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const importDialogVisible = ref(false)
@@ -18,7 +19,7 @@ const importing = ref(false)
 
 const form = reactive({
   course_id: '' as number | '',
-  type: 'choice' as 'choice' | 'fill',
+  type: 'choice' as 'choice' | 'fill' | 'multi_choice',
   stem: '',
   options: ['', '', '', ''],
   answer: '',
@@ -26,7 +27,9 @@ const form = reactive({
 })
 
 async function loadCourses() {
-  courses.value = await getCourses()
+  const all = await getCourses()
+  courses.value = all
+  writableCourses.value = all.filter(course => course.is_owner)
 }
 
 async function loadQuestions() {
@@ -89,7 +92,7 @@ async function handleSave() {
     course_id: form.course_id,
     type: form.type,
     stem: form.stem.trim(),
-    options: form.type === 'choice' ? form.options.map(item => item.trim()).filter(Boolean) : [],
+    options: (form.type === 'choice' || form.type === 'multi_choice') ? form.options.map(item => item.trim()).filter(Boolean) : [],
     answer: form.answer.trim(),
     explanation: form.explanation.trim(),
   }
@@ -124,7 +127,7 @@ async function handleDelete(row: Question) {
   }
 }
 
-const templateType = ref<'all' | 'choice' | 'fill'>('all')
+const templateType = ref<'all' | 'choice' | 'fill' | 'multi_choice'>('all')
 
 function openImport() {
   importFile.value = null
@@ -144,7 +147,7 @@ function triggerDownload(blob: Blob, filename: string) {
 async function handleDownloadTemplate() {
   try {
     const blob = await downloadQuestionTemplate(templateType.value)
-    const filename = templateType.value === 'choice' ? 'choice-question-template.xlsx' : templateType.value === 'fill' ? 'fill-question-template.xlsx' : 'question-template.xlsx'
+    const filename = templateType.value === 'choice' ? 'choice-question-template.xlsx' : templateType.value === 'fill' ? 'fill-question-template.xlsx' : templateType.value === 'multi_choice' ? 'multi-choice-question-template.xlsx' : 'question-template.xlsx'
     triggerDownload(blob as Blob, filename)
   } catch {
     ElMessage.error('模板下载失败，请稍后重试')
@@ -195,6 +198,7 @@ onMounted(async () => {
       </el-select>
       <el-select v-model="filterType" placeholder="全部题型" clearable style="width: 140px" @change="loadQuestions">
         <el-option label="选择题" value="choice" />
+        <el-option label="多选题" value="multi_choice" />
         <el-option label="填空题" value="fill" />
       </el-select>
       <el-button @click="resetFilter">重置</el-button>
@@ -205,21 +209,25 @@ onMounted(async () => {
       <el-table-column type="index" label="序号" width="70" />
       <el-table-column label="题干" min-width="260">
         <template #default="{ row }">
-          {{ row.stem.length > 48 ? row.stem.slice(0, 48) + '…' : row.stem }}
+          <span>{{ row.stem.length > 48 ? row.stem.slice(0, 48) + '…' : row.stem }}</span>
+          <el-tag v-if="row.is_synced" class="synced-tag" size="small" type="info" effect="plain">
+            公共同步
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="题型" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.type === 'choice' ? '' : 'success'" size="small" effect="plain">
-            {{ row.type === 'choice' ? '选择题' : '填空题' }}
+          <el-tag :type="row.type === 'choice' ? '' : row.type === 'multi_choice' ? 'warning' : 'success'" size="small" effect="plain">
+            {{ row.type === 'choice' ? '选择题' : row.type === 'multi_choice' ? '多选题' : '填空题' }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="course_name" label="所属课程" min-width="160" />
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
-          <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button type="danger" text size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="!row.is_synced" text size="small" @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="!row.is_synced" type="danger" text size="small" @click="handleDelete(row)">删除</el-button>
+          <span v-else class="readonly-text">只读</span>
         </template>
       </el-table-column>
     </el-table>
@@ -232,13 +240,14 @@ onMounted(async () => {
       <div class="form-group">
         <label>所属课程</label>
         <el-select v-model="form.course_id" placeholder="请选择课程" size="large" style="width: 100%">
-          <el-option v-for="course in courses" :key="course.id" :label="course.name" :value="course.id" />
+          <el-option v-for="course in writableCourses" :key="course.id" :label="course.name" :value="course.id" />
         </el-select>
       </div>
       <div class="form-group">
         <label>题型</label>
         <el-radio-group v-model="form.type" size="large">
           <el-radio-button value="choice">选择题</el-radio-button>
+          <el-radio-button value="multi_choice">多选题</el-radio-button>
           <el-radio-button value="fill">填空题</el-radio-button>
         </el-radio-group>
       </div>
@@ -246,7 +255,7 @@ onMounted(async () => {
         <label>题干</label>
         <el-input v-model="form.stem" type="textarea" :rows="3" placeholder="请输入题目内容" />
       </div>
-      <div v-if="form.type === 'choice'" class="form-group">
+      <div v-if="form.type === 'choice' || form.type === 'multi_choice'" class="form-group">
         <label>选项</label>
         <div v-for="(_, index) in form.options" :key="index" class="option-row">
           <span class="option-label">{{ ['A', 'B', 'C', 'D'][index] }}</span>
@@ -255,7 +264,7 @@ onMounted(async () => {
       </div>
       <div class="form-group">
         <label>答案</label>
-        <el-input v-model="form.answer" placeholder="选择题填 A/B/C/D，填空题填关键词" size="large" />
+        <el-input v-model="form.answer" :placeholder="form.type === 'multi_choice' ? '多选题填 AB、ACD 等（排序的字母组合）' : '选择题填 A/B/C/D，填空题填关键词'" size="large" />
       </div>
       <div class="form-group">
         <label>解析</label>
@@ -276,16 +285,18 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr><td>choice</td><td>示例课程</td><td>图灵测试由谁提出？</td><td>A. 图灵|B. 冯·诺依曼|C. 乔布斯|D. 爱因斯坦</td><td>A</td><td>图灵提出了图灵测试。</td></tr>
+            <tr><td>multi_choice</td><td>示例课程</td><td>以下哪些是编程语言？</td><td>A. Python|B. Java|C. HTML|D. C++</td><td>ABD</td><td>HTML 是标记语言，不是编程语言。</td></tr>
             <tr><td>fill</td><td>示例课程</td><td>中国的首都是哪里？</td><td></td><td>北京</td><td>填空题直接填写答案关键词。</td></tr>
           </tbody>
         </table>
-        <p class="import-note">请将“课程名称”填写为当前教师已有课程名称；“题型”仅支持 choice 和 fill。</p>
+        <p class=”import-note”>请将”课程名称”填写为当前教师已有课程名称；”题型”支持 choice、multi_choice 和 fill。多选题答案列填写排序后的字母组合，如 ABD。</p>
       </div>
       <div class="import-actions">
         <div class="template-block">
           <el-select v-model="templateType" style="width: 160px">
             <el-option label="全部题型模板" value="all" />
             <el-option label="选择题模板" value="choice" />
+            <el-option label="多选题模板" value="multi_choice" />
             <el-option label="填空题模板" value="fill" />
           </el-select>
           <el-button class="download-btn" @click="handleDownloadTemplate">下载模板</el-button>
@@ -359,6 +370,15 @@ onMounted(async () => {
 .empty-state {
   padding: var(--space-3xl) 0;
   text-align: center;
+}
+
+.synced-tag {
+  margin-left: var(--space-sm);
+}
+
+.readonly-text {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
 }
 
 .form-group {

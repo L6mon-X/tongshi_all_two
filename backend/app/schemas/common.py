@@ -111,6 +111,8 @@ class MaterialOut(BaseModel):
     size: str = ""
     date: str = ""
     file_id: Optional[int] = None
+    source_material_id: Optional[int] = None
+    is_synced: bool = False
 
     class Config:
         from_attributes = True
@@ -135,6 +137,8 @@ class QuestionOut(BaseModel):
     options: List[str] = []
     answer: str
     explanation: str = ""
+    source_question_id: Optional[int] = None
+    is_synced: bool = False
 
     class Config:
         from_attributes = True
@@ -150,6 +154,34 @@ class QuestionCreate(BaseModel):
 
 
 class QuestionUpdate(QuestionCreate):
+    pass
+
+
+class AdminPublicCourseCreate(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class AdminPublicCourseUpdate(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class AdminMaterialUpdate(BaseModel):
+    type: str = "video"
+    title: str = Field(min_length=1)
+    url: str = ""
+    size: str = "0 MB"
+    file_id: Optional[int] = None
+
+
+class AdminQuestionCreate(BaseModel):
+    type: str = "choice"
+    stem: str
+    options: List[str] = []
+    answer: str
+    explanation: str = ""
+
+
+class AdminQuestionUpdate(AdminQuestionCreate):
     pass
 
 
