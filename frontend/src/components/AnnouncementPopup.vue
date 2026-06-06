@@ -2,27 +2,47 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getUnreadCount, getAnnouncements, markAsRead, type Announcement } from '@/api/announcement'
+import {
+  getNotificationUnreadCount,
+  getNotifications,
+  markNotificationRead,
+  type StudentNotification,
+} from '@/api/notification'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const visible = ref(false)
 const latestAnnouncement = ref<Announcement | null>(null)
+const latestNotification = ref<StudentNotification | null>(null)
 
 onMounted(async () => {
   if (!authStore.isLoggedIn || authStore.user?.role !== 'student') return
   // Only show once per session
-  if (sessionStorage.getItem('announcement_popup_shown')) return
+  if (sessionStorage.getItem('message_popup_shown')) return
 
   try {
-    const { count } = await getUnreadCount()
-    if (count > 0) {
+    const [announcementCount, notificationCount] = await Promise.all([
+      getUnreadCount(),
+      getNotificationUnreadCount(),
+    ])
+    if (notificationCount.count > 0) {
+      const list = await getNotifications()
+      const unread = list.filter(item => !item.is_read)
+      if (unread.length > 0) {
+        latestNotification.value = unread[0] ?? null
+        visible.value = true
+        sessionStorage.setItem('message_popup_shown', '1')
+        return
+      }
+    }
+    if (announcementCount.count > 0) {
       const list = await getAnnouncements()
       const unread = list.filter(a => !a.is_read)
       if (unread.length > 0) {
         latestAnnouncement.value = unread[0] ?? null
         visible.value = true
-        sessionStorage.setItem('announcement_popup_shown', '1')
+        sessionStorage.setItem('message_popup_shown', '1')
       }
     }
   } catch {}
@@ -34,7 +54,11 @@ function goToInbox() {
 }
 
 async function dismiss() {
-  if (latestAnnouncement.value) {
+  if (latestNotification.value) {
+    try {
+      await markNotificationRead(latestNotification.value.id)
+    } catch {}
+  } else if (latestAnnouncement.value) {
     try {
       await markAsRead(latestAnnouncement.value.id)
     } catch {}
@@ -56,7 +80,23 @@ function formatDate(dateStr: string) {
     width="420px"
     :close-on-click-modal="false"
   >
-    <template v-if="latestAnnouncement">
+    <template v-if="latestNotification">
+      <div class="popup-content">
+        <div class="popup-type">
+          <el-tag
+            :type="latestNotification.content.includes('驳回') ? 'danger' : 'success'"
+            size="small"
+            effect="plain"
+          >作品审核</el-tag>
+        </div>
+        <h3 class="popup-title">{{ latestNotification.title }}</h3>
+        <div class="popup-meta">
+          <span>{{ formatDate(latestNotification.created_at) }}</span>
+        </div>
+        <p class="popup-body">{{ latestNotification.content }}</p>
+      </div>
+    </template>
+    <template v-else-if="latestAnnouncement">
       <div class="popup-content">
         <div class="popup-type">
           <el-tag type="success" size="small" effect="plain">题目</el-tag>

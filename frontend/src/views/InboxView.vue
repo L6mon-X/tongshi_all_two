@@ -6,14 +6,25 @@ import {
   getAnnouncements, markAsRead, recordCompletion,
   type Announcement,
 } from '@/api/announcement'
+import {
+  getNotifications,
+  markNotificationRead,
+  type StudentNotification,
+} from '@/api/notification'
 
 const router = useRouter()
 const announcements = ref<Announcement[]>([])
+const notifications = ref<StudentNotification[]>([])
 const loading = ref(true)
 
 onMounted(async () => {
   try {
-    announcements.value = await getAnnouncements()
+    const [announcementList, notificationList] = await Promise.all([
+      getAnnouncements(),
+      getNotifications(),
+    ])
+    announcements.value = announcementList
+    notifications.value = notificationList
   } finally {
     loading.value = false
   }
@@ -25,6 +36,21 @@ async function handleRead(item: Announcement) {
     await markAsRead(item.id)
     item.is_read = true
   } catch {}
+}
+
+async function handleNotificationRead(item: StudentNotification) {
+  if (item.is_read) return
+  try {
+    await markNotificationRead(item.id)
+    item.is_read = true
+  } catch {}
+}
+
+async function openProjectNotification(item: StudentNotification) {
+  await handleNotificationRead(item)
+  if (item.project_id) {
+    router.push(`/create/project/${item.project_id}`)
+  }
 }
 
 async function handleComplete(item: Announcement) {
@@ -81,11 +107,46 @@ function formatDate(dateStr: string) {
       <div class="container">
         <div v-if="loading" class="loading-state">加载中...</div>
 
-        <div v-else-if="announcements.length === 0" class="empty-state">
+        <div v-else-if="announcements.length === 0 && notifications.length === 0" class="empty-state">
           <p>暂无消息通知</p>
         </div>
 
         <div v-else class="inbox-list">
+          <div
+            v-for="item in notifications"
+            :key="`notification-${item.id}`"
+            class="inbox-item review-item"
+            :class="{ unread: !item.is_read }"
+            @click="handleNotificationRead(item)"
+          >
+            <div class="item-dot" v-if="!item.is_read"></div>
+            <div class="item-content">
+              <div class="item-header">
+                <span class="item-title">{{ item.title }}</span>
+                <el-tag
+                  :type="item.content.includes('驳回') ? 'danger' : 'success'"
+                  size="small"
+                  effect="plain"
+                >
+                  作品审核
+                </el-tag>
+              </div>
+              <div class="item-meta">
+                <span>{{ formatDate(item.created_at) }}</span>
+              </div>
+              <div class="item-body">{{ item.content }}</div>
+              <div v-if="item.project_id" class="item-actions">
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
+                  round
+                  @click.stop="openProjectNotification(item)"
+                >查看作品</el-button>
+              </div>
+            </div>
+          </div>
+
           <div
             v-for="item in announcements"
             :key="item.id"

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getUnreadCount } from '@/api/announcement'
+import { getNotificationUnreadCount } from '@/api/notification'
 
 const router = useRouter()
 const route = useRoute()
@@ -11,12 +12,19 @@ const authStore = useAuthStore()
 const scrolled = ref(false)
 const mobileMenuOpen = ref(false)
 const unreadCount = ref(0)
+let unreadTimer: number | undefined
 
 async function fetchUnreadCount() {
-  if (!authStore.isLoggedIn || authStore.user?.role !== 'student') return
+  if (!authStore.isLoggedIn || authStore.user?.role !== 'student') {
+    unreadCount.value = 0
+    return
+  }
   try {
-    const res = await getUnreadCount()
-    unreadCount.value = res.count
+    const [announcementRes, notificationRes] = await Promise.all([
+      getUnreadCount(),
+      getNotificationUnreadCount(),
+    ])
+    unreadCount.value = announcementRes.count + notificationRes.count
   } catch {}
 }
 
@@ -45,8 +53,19 @@ function handleLogout() {
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
   fetchUnreadCount()
+  unreadTimer = window.setInterval(fetchUnreadCount, 15000)
 })
-onUnmounted(() => window.removeEventListener('scroll', handleScroll))
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
+  if (unreadTimer !== undefined) window.clearInterval(unreadTimer)
+})
+
+watch(
+  () => route.fullPath,
+  () => {
+    fetchUnreadCount()
+  },
+)
 </script>
 
 <template>

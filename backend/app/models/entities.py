@@ -190,6 +190,22 @@ class ProjectLike(Base):
     project = relationship("Project", back_populates="project_likes")
 
 
+class StudentNotification(Base):
+    __tablename__ = "student_notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(32), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    type = Column(String(32), nullable=False, default="project_review")
+    title = Column(String(128), nullable=False)
+    content = Column(Text, default="")
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    is_read = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User")
+    project = relationship("Project")
+
+
 class Announcement(Base):
     __tablename__ = "announcements"
     id = Column(Integer, primary_key=True, autoincrement=True)

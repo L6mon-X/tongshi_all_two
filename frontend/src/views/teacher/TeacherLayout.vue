@@ -1,10 +1,14 @@
 ﻿<script setup lang="ts">
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
+import { getTeacherStats } from '@/api/teacher'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const pendingReviewCount = ref(0)
+let reviewTimer: number | undefined
 
 const navItems = [
   { name: '概述', path: '/teacher', icon: '&#9673;' },
@@ -22,6 +26,33 @@ const navItems = [
 function isActive(path: string) {
   return route.path === path
 }
+
+async function fetchPendingReviews() {
+  if (!authStore.isLoggedIn || authStore.user?.role !== 'teacher') {
+    pendingReviewCount.value = 0
+    return
+  }
+  try {
+    const stats = await getTeacherStats()
+    pendingReviewCount.value = stats.pending_reviews
+  } catch {}
+}
+
+onMounted(() => {
+  fetchPendingReviews()
+  reviewTimer = window.setInterval(fetchPendingReviews, 15000)
+})
+
+onUnmounted(() => {
+  if (reviewTimer !== undefined) window.clearInterval(reviewTimer)
+})
+
+watch(
+  () => route.fullPath,
+  () => {
+    fetchPendingReviews()
+  },
+)
 </script>
 
 <template>
@@ -61,7 +92,13 @@ function isActive(path: string) {
             :class="{ active: isActive(item.path) }"
           >
             <span class="sidebar-icon" v-html="item.icon"></span>
-            {{ item.name }}
+            <span class="sidebar-text">{{ item.name }}</span>
+            <span
+              v-if="item.path === '/teacher/reviews' && pendingReviewCount > 0"
+              class="review-badge"
+            >
+              {{ pendingReviewCount > 99 ? '99+' : pendingReviewCount }}
+            </span>
           </router-link>
         </nav>
       </aside>
@@ -180,6 +217,7 @@ function isActive(path: string) {
   border-radius: var(--radius-sm);
   border-left: 3px solid transparent;
   transition: all var(--duration-fast);
+  position: relative;
 }
 
 .sidebar-link:hover {
@@ -204,6 +242,25 @@ function isActive(path: string) {
   text-align: center;
 }
 
+.sidebar-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--color-bg-card);
+}
+
 .teacher-main {
   flex: 1;
   margin-left: 200px;
@@ -223,6 +280,20 @@ function isActive(path: string) {
 
   .sidebar-link span:not(.sidebar-icon) {
     display: none;
+  }
+
+  .review-badge {
+    display: block !important;
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    min-width: 8px;
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    line-height: 8px;
   }
 
   .teacher-main {

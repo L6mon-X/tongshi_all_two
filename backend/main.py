@@ -141,4 +141,4 @@ def root():
 # ── run ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8050, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("BACKEND_PORT", "8050")), reload=True)

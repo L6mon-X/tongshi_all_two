@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessException
 from app.models.entities import Project, ProjectImage, ProjectLike, User
+from app.services.notification_service import create_project_review_notification
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,7 @@ def approve_project(db: Session, project_id: int):
         return None
     project.status = "approved"
     project.reject_reason = ""
+    create_project_review_notification(db, project, approved=True)
     db.commit()
     logger.info("作品审核通过: project_id=%s, title=%s", project_id, project.title)
     return project
@@ -172,6 +174,7 @@ def reject_project(db: Session, project_id: int, reason: str):
         return None
     project.status = "rejected"
     project.reject_reason = reason
+    create_project_review_notification(db, project, approved=False, reason=reason)
     db.commit()
     logger.info("作品驳回: project_id=%s, title=%s, reason=%s",
                 project_id, project.title, reason)
