@@ -4,24 +4,54 @@ import { useRoute, useRouter } from 'vue-router'
 import { getCourseQuestions, type Question } from '@/api/question'
 import { submitAnswer as apiSubmitAnswer } from '@/api/quiz'
 import { loadQuizDraft, saveQuizDraft, clearQuizDraft } from '@/composables/useQuizDraft'
+import { recordCompletion } from '@/api/announcement'
 
 const route = useRoute()
 const router = useRouter()
 const courseId = computed(() => Number(route.params.courseId) || 1)
+const questionIds = computed(() => {
+  const raw = route.query.question_ids as string | undefined
+  if (!raw) return null
+  return raw.split(',').map(Number).filter(n => !isNaN(n))
+})
+const announcementId = computed(() => {
+  const raw = route.query.announcement_id as string | undefined
+  return raw ? Number(raw) : null
+})
+const randomCount = computed(() => {
+  const raw = route.query.random as string | undefined
+  return raw ? Number(raw) : null
+})
 
 const mockQuestions = ref<Question[]>([])
 const loading = ref(true)
 
+// Fisher-Yates 洗牌
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
 watch(courseId, async () => {
   loading.value = true
   try {
-    mockQuestions.value = await getCourseQuestions(courseId.value)
+    let qs = await getCourseQuestions(courseId.value, questionIds.value?.join(','))
+    // 自由练习：随机选取指定数量题目
+    if (randomCount.value && !questionIds.value) {
+      qs = shuffle(qs).slice(0, randomCount.value)
+    }
+    mockQuestions.value = qs
   } finally {
     loading.value = false
   }
 }, { immediate: true })
 
 const currentIndex = ref(0)
+const completionMarked = ref(false)
 const selectedOption = ref<string | null>(null)
 const selectedOptions = ref<Set<string>>(new Set())
 const fillAnswer = ref('')
@@ -29,9 +59,17 @@ const submitted = ref(false)
 const answers = ref<(string | null)[]>([])
 const results = ref<(boolean | null)[]>([])
 
-// 加载题目后尝试恢复草稿
+// 加载题目后尝试恢复草稿（作业入口跳过）
 watch(mockQuestions, (qs) => {
   if (!qs.length) return
+  // 从作业入口进入时不恢复草稿，每次全新开始
+  if (announcementId.value) {
+    answers.value = qs.map(() => null)
+    results.value = qs.map(() => null)
+    currentIndex.value = 0
+    resetState()
+    return
+  }
   const draft = loadQuizDraft(courseId.value)
   if (draft && draft.courseId === courseId.value) {
     // 恢复已答状态
@@ -63,6 +101,13 @@ const currentQuestion = computed((): Question | null => mockQuestions.value[curr
 const totalQuestions = computed(() => mockQuestions.value.length)
 const progress = computed(() => totalQuestions.value > 0 ? Math.round(((currentIndex.value + 1) / totalQuestions.value) * 100) : 0)
 const allDone = computed(() => totalQuestions.value > 0 && results.value.every(r => r !== null))
+const canSubmit = computed(() => {
+  const q = currentQuestion.value
+  if (!q) return false
+  if (q.type === 'multi_choice') return selectedOptions.value.size > 0
+  if (q.type === 'choice') return !!selectedOption.value
+  return fillAnswer.value.trim().length > 0
+})
 
 const optionLabels = ['A', 'B', 'C', 'D']
 const optionItems = computed(() => (currentQuestion.value?.options ?? []).map((text, index) => ({
@@ -89,9 +134,14 @@ async function submitAnswer() {
   results.value[currentIndex.value] = result.is_correct
   submitted.value = true
   persistDraft()
-  // 全部完成时清理草稿
+  // 全部完成时清理草稿 + 自动标记作业完成
   if (results.value.every(r => r !== null)) {
     clearQuizDraft(courseId.value)
+    const annId = announcementId.value
+    if (annId && !completionMarked.value) {
+      completionMarked.value = true
+      recordCompletion(annId).catch(() => {})
+    }
   }
 }
 
@@ -304,7 +354,7 @@ function persistDraft() {
 
           <!-- Submit button -->
           <div v-if="!submitted" class="action-bar">
-            <button class="btn-submit" @click="submitAnswer">
+            <button class="btn-submit" :disabled="!canSubmit" @click="submitAnswer">
               提交答案
             </button>
           </div>
@@ -685,9 +735,14 @@ function persistDraft() {
   transition: all var(--duration-fast);
 }
 
-.btn-submit:hover {
+.btn-submit:hover:not(:disabled) {
   opacity: 0.9;
   transform: translateY(-1px);
+}
+
+.btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Result */
@@ -767,6 +822,23 @@ function persistDraft() {
 
 .nav-btn:disabled {
   color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.nav-btn.submit-all {
+  color: white;
+  background: #10b981;
+  border: none;
+  padding: 0.5rem 1.5rem;
+}
+
+.nav-btn.submit-all:hover:not(:disabled) {
+  background: #059669;
+}
+
+.nav-btn.submit-all:disabled {
+  background: #d1d5db;
+  color: #9ca3af;
   cursor: not-allowed;
 }
 

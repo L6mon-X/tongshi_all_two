@@ -1,6 +1,7 @@
 """课程接口响应组装。"""
 from __future__ import annotations
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.timezone_utils import to_beijing_iso
@@ -40,20 +41,21 @@ def build_course_list(db: Session, current_user: AuthUser, keyword: str | None =
             .filter(StudentClassEnrollment.user_id == current_user.id)
             .all()
         )
-        if not enrollments:
-            return {"courses": [], "hint": "你尚未加入任何班级，请联系老师"}
-
         class_ids = [item.class_id for item in enrollments]
-        classes_with_course = (
-            db.query(Class)
-            .filter(Class.id.in_(class_ids), Class.course_id.isnot(None))
-            .all()
-        )
-        if not classes_with_course:
-            return {"courses": [], "hint": "你的班级尚未分配课程，请联系老师"}
+        if class_ids:
+            classes_with_course = (
+                db.query(Class)
+                .filter(Class.id.in_(class_ids), Class.course_id.isnot(None))
+                .all()
+            )
+            enrolled_course_ids = list({item.course_id for item in classes_with_course})
+        else:
+            enrolled_course_ids = []
 
-        course_ids = list({item.course_id for item in classes_with_course})
-        query = db.query(Course).filter(Course.id.in_(course_ids))
+        # 学生可见：已加入班级的课程 + 所有公共课程
+        query = db.query(Course).filter(
+            or_(Course.id.in_(enrolled_course_ids), Course.is_public == True)
+        )
         if keyword:
             query = query.filter(Course.name.contains(keyword))
         courses = query.order_by(Course.id.desc()).all()

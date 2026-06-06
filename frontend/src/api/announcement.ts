@@ -16,6 +16,7 @@ export interface Announcement {
   end_time: string | null
   created_at: string
   is_read: boolean
+  is_completed: boolean
 }
 
 export interface StudentInfo {

@@ -181,7 +181,7 @@ function formatDate(dateStr: string) {
                 <span>包含 {{ item.question_ids.length }} 道题目</span>
                 <router-link
                   v-if="!isExpired(item) && !isNotStarted(item)"
-                  :to="`/practice`"
+                  :to="`/practice/quiz/${item.course_id}?question_ids=${item.question_ids.join(',')}&announcement_id=${item.id}`"
                   class="quiz-link"
                 >去练习</router-link>
                 <span v-else class="quiz-link-disabled">{{ isExpired(item) ? '已截止' : '未开始' }}</span>

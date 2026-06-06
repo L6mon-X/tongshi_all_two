@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCourses, type Course } from '@/api/course'
 
@@ -11,13 +11,19 @@ const keyword = ref('')
 async function loadCourses() {
   loading.value = true
   try {
-    courses.value = await getCourses(keyword.value || undefined)
+    courses.value = await getCourses()
   } finally {
     loading.value = false
   }
 }
 
 onMounted(loadCourses)
+
+const filteredCourses = computed(() => {
+  const q = keyword.value.trim().toLowerCase()
+  if (!q) return courses.value
+  return courses.value.filter(c => c.name.toLowerCase().includes(q))
+})
 </script>
 
 <template>
@@ -26,8 +32,8 @@ onMounted(loadCourses)
       <div class="container">
         <div class="hero-inner">
           <div class="hero-icon">学</div>
-          <h1>探 · 学无止境</h1>
-          <p>按课程查看视频课件、PDF 讲义和学习进度。</p>
+          <h1>学 · 积累知识</h1>
+          <p>浏览课程资料、课件和题库，按自己的节奏学习。</p>
         </div>
       </div>
     </section>
@@ -44,14 +50,24 @@ onMounted(loadCourses)
           <button @click="loadCourses">搜索</button>
         </div>
         <div v-if="loading" class="empty-state">课程加载中...</div>
-        <div v-else-if="courses.length > 0" class="course-grid">
-          <button v-for="course in courses" :key="course.id" class="course-card" @click="router.push(`/learn/course/${course.id}`)">
+        <div v-else-if="filteredCourses.length > 0" class="course-grid">
+          <div
+            v-for="course in filteredCourses"
+            :key="course.id"
+            class="course-card"
+          >
             <h3>{{ course.name }}</h3>
             <p>{{ course.material_count }} 份学习资料 · {{ course.question_count }} 道练习题</p>
-            <span>查看课程</span>
-          </button>
+            <div class="card-links">
+              <button class="card-link materials" @click="router.push(`/learn/course/${course.id}`)">
+                资料
+              </button>
+            </div>
+          </div>
         </div>
-        <div v-else class="empty-state">{{ keyword ? '未找到匹配的课程' : '暂无课程内容。' }}</div>
+        <div v-else class="empty-state">
+          {{ keyword ? '未找到匹配的课程' : '暂无课程内容。' }}
+        </div>
       </div>
     </section>
   </div>
@@ -137,6 +153,8 @@ onMounted(loadCourses)
 
 .course-card {
   text-align: left;
+  display: flex;
+  flex-direction: column;
   padding: var(--space-xl);
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -183,11 +201,26 @@ onMounted(loadCourses)
   margin-bottom: var(--space-lg);
 }
 
-.course-card span {
-  color: var(--color-learn);
-  font-weight: 700;
+.card-links {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.card-link {
+  padding: 6px 18px;
   font-size: 0.85rem;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  transition: all var(--duration-fast);
+}
+
+.card-link.materials {
+  color: white;
+  background: var(--color-learn);
+}
+
+.card-link.materials:hover {
+  opacity: 0.9;
 }
 
 .empty-state {

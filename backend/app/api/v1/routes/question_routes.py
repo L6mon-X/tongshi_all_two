@@ -55,15 +55,20 @@ def get_questions(
     return paginated_success([_format_question(q) for q in questions], total, page, page_size)
 
 
-@router.get("/course/{course_id}", summary="课程题目", description="获取指定课程的所有题目（用于测验）")
+@router.get("/course/{course_id}", summary="课程题目", description="获取指定课程的题目（用于测验），可选 ?ids=1,2,3 过滤指定题目")
 def get_course_questions_for_quiz(
     course_id: int,
+    ids: str | None = None,
     db: Session = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
     if not can_view_course_questions(db, course_id, current_user.id, current_user.role):
         raise BusinessException(404, "课程不存在")
     questions = get_course_questions(db, course_id)
+    # 按 question_ids 过滤（作业入口传入）
+    if ids:
+        id_set = {int(i) for i in ids.split(",") if i.strip().isdigit()}
+        questions = [q for q in questions if q.id in id_set]
     return success([_format_question(q) for q in questions])
 
 

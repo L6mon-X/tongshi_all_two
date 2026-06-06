@@ -69,6 +69,12 @@ const router = createRouter({
       meta: { title: '行 · 知行合一' },
     },
     {
+      path: '/practice/assignments',
+      name: 'practice-assignments',
+      component: () => import('../views/PracticeAssignments.vue'),
+      meta: { title: '选择作业' },
+    },
+    {
       path: '/practice/quiz/:courseId',
       name: 'practice-quiz',
       component: () => import('../views/PracticeQuizView.vue'),

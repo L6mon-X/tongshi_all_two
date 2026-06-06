@@ -36,8 +36,9 @@ export function getQuestions(params?: {
   return http.get<any, PaginatedResult<Question>>('/questions', { params })
 }
 
-export function getCourseQuestions(courseId: number) {
-  return http.get<any, Question[]>(`/questions/course/${courseId}`)
+export function getCourseQuestions(courseId: number, ids?: string) {
+  const params = ids ? { params: { ids } } : undefined
+  return http.get<any, Question[]>(`/questions/course/${courseId}`, params)
 }
 
 export function createQuestion(data: Partial<Question>) {

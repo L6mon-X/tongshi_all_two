@@ -38,8 +38,10 @@ def _class_payloads(ann: Announcement) -> list[dict]:
 def _announcement_payload(ann: Announcement, current_user_id: str | None = None):
     teacher = ann.teacher
     is_read = False
+    is_completed = False
     if current_user_id:
         is_read = any(r.user_id == current_user_id for r in ann.reads)
+        is_completed = any(c.user_id == current_user_id for c in ann.completions)
     classes = _class_payloads(ann)
     return {
         "id": ann.id,
@@ -57,6 +59,7 @@ def _announcement_payload(ann: Announcement, current_user_id: str | None = None)
         "end_time": _iso(ann.end_time),
         "created_at": _iso(ann.created_at),
         "is_read": is_read,
+        "is_completed": is_completed,
     }
 
 
